@@ -1,5 +1,7 @@
 # Killzone Mercenary Recomp
 
+[![Windows quality gates](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/workflows/windows-quality.yml/badge.svg)](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/workflows/windows-quality.yml)
+
 An unofficial, source-only foundation for a native Windows x64 recompilation of
 the PlayStation Vita release of *Killzone Mercenary* (PCSA00107).
 
@@ -59,7 +61,8 @@ ctest --preset windows-x64-debug
 ```
 
 Equivalent `windows-x64-relwithdebinfo` and `windows-x64-release` presets are
-provided. More details are in [docs/BUILDING.md](docs/BUILDING.md).
+provided. More details are in [docs/BUILDING.md](docs/BUILDING.md), including
+the public-only [quality gates](docs/QUALITY_GATES.md).
 
 ## Native host
 

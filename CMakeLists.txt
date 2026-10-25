@@ -285,6 +285,17 @@ if(BUILD_TESTING)
       -File "${CMAKE_CURRENT_SOURCE_DIR}/tools/content/Guard-PrivateContent.ps1"
       -RepositoryRoot "${CMAKE_CURRENT_SOURCE_DIR}"
   )
+  add_test(
+    NAME content-guard-tracked
+    COMMAND
+      "${KZMRECOMP_POWERSHELL}"
+      -NoLogo
+      -NoProfile
+      -ExecutionPolicy Bypass
+      -File "${CMAKE_CURRENT_SOURCE_DIR}/tools/content/Guard-PrivateContent.ps1"
+      -RepositoryRoot "${CMAKE_CURRENT_SOURCE_DIR}"
+      -Tracked
+  )
 
   if(KZMRECOMP_BUILD_HOST)
     add_executable(kzmrecomp_host_tests

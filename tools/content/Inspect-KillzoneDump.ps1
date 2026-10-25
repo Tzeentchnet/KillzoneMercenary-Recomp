@@ -132,7 +132,6 @@ $directoryCount = 0
 $unsafeEntryCount = 0
 $ebootFormat = 'missing'
 $gameDataFormat = 'missing'
-$paramSfoFormat = 'missing'
 $allModulePayloadsVisible = $false
 
 $fileStream = $null
@@ -290,12 +289,9 @@ try {
         $paramPrefix = Read-ZipEntryPrefix `
             -Entry $entryMap["$titleRoot/sce_sys/param.sfo"] `
             -Count 4
-        if (Test-BytePrefix `
+        if (-not (Test-BytePrefix `
                 $paramPrefix `
-                ([byte[]] @(0x00, 0x50, 0x53, 0x46))) {
-            $paramSfoFormat = 'sfo'
-        } else {
-            $paramSfoFormat = 'invalid-or-protected'
+                ([byte[]] @(0x00, 0x50, 0x53, 0x46)))) {
             $errors.Add(
                 "The required param.sfo entry does not have the PSF signature."
             )

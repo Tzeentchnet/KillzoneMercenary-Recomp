@@ -18,7 +18,7 @@ import coverage, and title HLE/GXM preconditions are measurable.
 
 ### Framework
 
-- Repository: `D:\Github\vitarecomp`
+- Repository: `Tzeentchnet/vitarecomp`
 - Remote: `Tzeentchnet/vitarecomp`
 - Mainline: `8bf490e` (`Merge runtime foundation`)
 - Upstream pin: `6ed4a5c`
@@ -40,13 +40,14 @@ commit `8bf490e6702eae69d07a74dd9397c1e32e7a6dbc`.
 
 ### Game project
 
-- Repository: `D:\Github\KillzoneMercenary-Recomp`
+- Repository: `Tzeentchnet/KillzoneMercenary-Recomp`
 - Remote: `Tzeentchnet/KillzoneMercenary-Recomp`
 - The public `main` branch contains the source-only foundation and native host
   checkpoint.
 - Content pipeline, research migration, Vita3K patch series, staging tools,
   host sources, tests, and documentation are preserved together.
-- `third_party/vitarecomp` is pinned to `8bf490e`.
+- `third_party/vitarecomp` is pinned to the full commit recorded in
+  `config/framework.commit`.
 
 ### Preserved prior work
 

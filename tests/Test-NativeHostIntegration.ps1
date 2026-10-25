@@ -30,7 +30,7 @@ function Assert-True {
     }
 }
 
-function Quote-ProcessArgument {
+function ConvertTo-ProcessArgument {
     param([string] $Value)
 
     if ($Value -notmatch '[\s"]') {
@@ -52,7 +52,7 @@ function Invoke-HostProcess {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     $start.Arguments = (
-        @($Arguments | ForEach-Object { Quote-ProcessArgument $_ }) -join ' '
+        @($Arguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' '
     )
     foreach ($entry in $Environment.GetEnumerator()) {
         $start.EnvironmentVariables[$entry.Key] = [string] $entry.Value

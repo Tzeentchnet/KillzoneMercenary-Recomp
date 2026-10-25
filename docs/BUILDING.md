@@ -9,7 +9,8 @@
 - PowerShell 7 or Windows PowerShell 5.1
 - the official Microsoft DirectX Shader Compiler package containing
   `dxc.exe` version `1.8.2505.32`
-- the Vulkan SDK when Vulkan support is required
+- the Vulkan SDK headers, or the pinned public headers installed by the local
+  quality bootstrap
 
 Initialize the pinned framework after cloning:
 
@@ -34,6 +35,24 @@ $env:VULKAN_SDK = '<Vulkan SDK root>'
 
 No content path, SDK path, adapter index, or renderer is compiled into the
 host.
+
+## Local quality gates
+
+The local scripts mirror the required GitHub Actions matrix and bootstrap only
+hash-verified public tools under ignored `out/`:
+
+```powershell
+pwsh -NoProfile -File tools/ci/Invoke-Quality.ps1 -Bootstrap
+pwsh -NoProfile -File tools/ci/Invoke-WindowsBuild.ps1 `
+  -Preset windows-x64-debug -Bootstrap
+pwsh -NoProfile -File tools/ci/Invoke-WindowsBuild.ps1 `
+  -Preset windows-x64-relwithdebinfo -Bootstrap
+pwsh -NoProfile -File tools/ci/Invoke-WindowsBuild.ps1 `
+  -Preset windows-x64-release -Bootstrap
+```
+
+See [QUALITY_GATES.md](QUALITY_GATES.md) for the enforced coverage and renderer
+skip policy.
 
 ## Presets
 
@@ -76,11 +95,12 @@ staging, and private-content guards.
 
 ## Safety check
 
-The CTest suite runs synthetic path-policy tests and scans the current staged
-Git paths. Run the staged scan directly when reviewing a change:
+The CTest suite runs synthetic path-policy tests and scans both the current
+staged paths and the complete tracked tree. Run either scan directly:
 
 ```powershell
 pwsh -NoProfile -File tools/content/Guard-PrivateContent.ps1
+pwsh -NoProfile -File tools/content/Guard-PrivateContent.ps1 -Tracked
 ```
 
 Configure local private roots by copying

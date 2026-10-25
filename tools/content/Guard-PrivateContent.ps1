@@ -6,6 +6,7 @@ param(
     [string[]] $Paths,
     [string] $PrivateRootsFile,
     [string[]] $PrivateRoot = @(),
+    [switch] $Tracked,
     [switch] $ReportOnly
 )
 
@@ -56,6 +57,42 @@ function Get-StagedPaths {
 
     if ($process.ExitCode -ne 0) {
         throw "Git failed while reading staged paths: $($standardError.Trim())"
+    }
+
+    return $standardOutput.Split(
+        @([char] 0),
+        [StringSplitOptions]::RemoveEmptyEntries
+    )
+}
+
+function Get-TrackedPaths {
+    param([string] $Root)
+
+    $git = Get-Command git -ErrorAction Stop
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $git.Source
+    $startInfo.WorkingDirectory = $Root
+    $startInfo.Arguments = '-c core.quotepath=false ls-files -z --'
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $startInfo.StandardOutputEncoding = $utf8
+    $startInfo.StandardErrorEncoding = $utf8
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) {
+        throw 'Unable to start Git while reading tracked paths.'
+    }
+
+    $standardOutput = $process.StandardOutput.ReadToEnd()
+    $standardError = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    if ($process.ExitCode -ne 0) {
+        throw "Git failed while reading tracked paths: $($standardError.Trim())"
     }
 
     return $standardOutput.Split(
@@ -231,8 +268,14 @@ $rules = @(
     }
 )
 
+if ($Tracked -and $PSBoundParameters.ContainsKey('Paths')) {
+    throw '-Tracked and -Paths are mutually exclusive.'
+}
+
 $pathsToCheck = if ($PSBoundParameters.ContainsKey('Paths')) {
     @($Paths)
+} elseif ($Tracked) {
+    @(Get-TrackedPaths -Root $repository)
 } else {
     @(Get-StagedPaths -Root $repository)
 }

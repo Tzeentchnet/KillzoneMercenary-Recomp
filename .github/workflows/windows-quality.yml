@@ -1,0 +1,57 @@
+name: Windows quality gates
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QUALITY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+
+jobs:
+  format-static-artifact:
+    name: Formatting, static quality, schemas, artifact safety
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Check out source and exact framework pin
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955b # v4.3.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Run pinned quality and public-fixture gates
+        shell: pwsh
+        run: ./tools/ci/Invoke-Quality.ps1 -Bootstrap
+
+  build-test:
+    name: MSVC ${{ matrix.configuration }} / host DX12 + Vulkan
+    runs-on: windows-2022
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: Debug
+            preset: windows-x64-debug
+          - configuration: RelWithDebInfo
+            preset: windows-x64-relwithdebinfo
+          - configuration: Release
+            preset: windows-x64-release
+    steps:
+      - name: Check out source and exact framework pin
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955b # v4.3.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Configure, build, and test all required coverage
+        shell: pwsh
+        run: ./tools/ci/Invoke-WindowsBuild.ps1 -Preset '${{ matrix.preset }}' -Bootstrap
