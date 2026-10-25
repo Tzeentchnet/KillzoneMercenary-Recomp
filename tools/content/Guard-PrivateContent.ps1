@@ -272,13 +272,15 @@ if ($Tracked -and $PSBoundParameters.ContainsKey('Paths')) {
     throw '-Tracked and -Paths are mutually exclusive.'
 }
 
-$pathsToCheck = if ($PSBoundParameters.ContainsKey('Paths')) {
-    @($Paths)
-} elseif ($Tracked) {
-    @(Get-TrackedPaths -Root $repository)
-} else {
-    @(Get-StagedPaths -Root $repository)
-}
+$pathsToCheck = @(
+    if ($PSBoundParameters.ContainsKey('Paths')) {
+        $Paths
+    } elseif ($Tracked) {
+        Get-TrackedPaths -Root $repository
+    } else {
+        Get-StagedPaths -Root $repository
+    }
+)
 
 $violations = New-Object System.Collections.Generic.List[object]
 foreach ($candidatePath in $pathsToCheck) {
