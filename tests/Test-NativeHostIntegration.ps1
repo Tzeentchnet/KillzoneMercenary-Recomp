@@ -429,6 +429,10 @@ switch ($Mode) {
             '--frames=4'
         )
         if ($result.ExitCode -in @(4, 5)) {
+            Write-Host (
+                'SKIP: DX12 hardware smoke unavailable; no usable hardware ' +
+                "adapter (host exit $($result.ExitCode))."
+            )
             exit 77
         }
         Assert-True `
@@ -444,6 +448,10 @@ switch ($Mode) {
             '--frames=4'
         )
         if ($result.ExitCode -in @(4, 5)) {
+            Write-Host (
+                'SKIP: Vulkan smoke unavailable; no usable loader, ICD, or ' +
+                "adapter (host exit $($result.ExitCode))."
+            )
             exit 77
         }
         Assert-True `
