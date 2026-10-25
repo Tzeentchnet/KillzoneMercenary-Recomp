@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/kzmrecomp/runtime-manifest.schema.json",
+  "title": "Killzone runtime image manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "titleId",
+    "sourceArchive",
+    "vita3k",
+    "imageFormat",
+    "modules"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "titleId": {
+      "const": "PCSA00107"
+    },
+    "sourceArchive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{64}$"
+        }
+      }
+    },
+    "vita3k": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRevision",
+        "dumpCapability"
+      ],
+      "properties": {
+        "sourceRevision": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{7,40}$"
+        },
+        "dumpCapability": {
+          "const": "--dump-elfs"
+        }
+      }
+    },
+    "imageFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elfClass",
+        "byteOrder",
+        "machine"
+      ],
+      "properties": {
+        "elfClass": {
+          "const": "ELF32"
+        },
+        "byteOrder": {
+          "const": "little-endian"
+        },
+        "machine": {
+          "const": "ARM"
+        }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/module"
+      }
+    }
+  },
+  "$defs": {
+    "hexAddress": {
+      "type": "string",
+      "pattern": "^0x[0-9A-Fa-f]{8}$"
+    },
+    "hexRangeEnd": {
+      "type": "string",
+      "pattern": "^0x(?:[0-9A-Fa-f]{8}|100000000)$"
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "fileSize",
+        "moduleInfo",
+        "programHeaderCount",
+        "loadSegments"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![\\\\/])(?!.*(?:^|/)\\.\\.?(/|$))(?!.*[\\\\:]).+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{64}$"
+        },
+        "fileSize": {
+          "type": "integer",
+          "minimum": 52,
+          "maximum": 4294967295
+        },
+        "moduleInfo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "encodedEntry",
+            "segmentIndex",
+            "segmentOffset",
+            "virtualAddress"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 27,
+              "pattern": "^[ -~]+$"
+            },
+            "encodedEntry": {
+              "$ref": "#/$defs/hexAddress"
+            },
+            "segmentIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4095
+            },
+            "segmentOffset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1073741823
+            },
+            "virtualAddress": {
+              "$ref": "#/$defs/hexAddress"
+            }
+          }
+        },
+        "programHeaderCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "loadSegments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/loadSegment"
+          }
+        }
+      }
+    },
+    "loadSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "fileOffset",
+        "fileSize",
+        "virtualAddress",
+        "memorySize",
+        "rangeEndExclusive",
+        "flags",
+        "alignment"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4095
+        },
+        "fileOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "fileSize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "virtualAddress": {
+          "$ref": "#/$defs/hexAddress"
+        },
+        "memorySize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "rangeEndExclusive": {
+          "$ref": "#/$defs/hexRangeEnd"
+        },
+        "flags": {
+          "type": "string",
+          "pattern": "^[r-][w-][x-]$"
+        },
+        "alignment": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    }
+  }
+}

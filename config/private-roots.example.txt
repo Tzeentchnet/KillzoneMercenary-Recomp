@@ -1,0 +1,8 @@
+# Copy this file to private-roots.txt and add one local root per line.
+# private-roots.txt is ignored and must never be committed.
+#
+# Entries may be absolute:
+# D:\Games\Vita\KillzoneMercenary
+#
+# Or relative to this repository:
+# local-content

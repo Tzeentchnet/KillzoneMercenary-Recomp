@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/kzmrecomp/content-pipeline.schema.json",
+  "title": "External content pipeline configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "titleId",
+    "archive",
+    "expectedArchiveLayout",
+    "vita3k",
+    "privateDataRoot"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "titleId": {
+      "const": "PCSA00107"
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "computeSha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "computeSha256": {
+          "type": "boolean"
+        }
+      }
+    },
+    "expectedArchiveLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "requiredEntries",
+        "modulePattern"
+      ],
+      "properties": {
+        "root": {
+          "const": "app/PCSA00107"
+        },
+        "requiredEntries": {
+          "const": [
+            "app/PCSA00107/eboot.bin",
+            "app/PCSA00107/game_data/data_ngp.psarc",
+            "app/PCSA00107/sce_sys/package/work.bin",
+            "app/PCSA00107/sce_sys/param.sfo"
+          ]
+        },
+        "modulePattern": {
+          "const": "app/PCSA00107/sce_module/*.suprx"
+        }
+      }
+    },
+    "vita3k": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "sourceRevision"
+      ],
+      "properties": {
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceRevision": {
+          "type": "string",
+          "oneOf": [
+            {
+              "pattern": "^[0-9A-Fa-f]{7,40}$"
+            },
+            {
+              "const": "<40-character-vita3k-git-commit>"
+            }
+          ]
+        }
+      }
+    },
+    "privateDataRoot": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

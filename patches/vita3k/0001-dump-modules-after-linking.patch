@@ -1,0 +1,107 @@
+From 8a2f64eae58b072fa1292d35d450123afa9153af Mon Sep 17 00:00:00 2001
+From: Tzeentchnet <58480142+Tzeentchnet@users.noreply.github.com>
+Date: Sat, 24 Oct 2026 21:44:13 -0700
+Subject: [PATCH 1/2] Dump modules after linking
+
+Vita3K already reconstructs runtime-addressed ELF files from loaded segments. Move that opt-in dump after export and import linking so the captured bytes match the code the CPU will execute.
+
+License: GPL-2.0-or-later
+---
+ vita3k/kernel/src/load_self.cpp | 75 +++++++++++++++++----------------
+ 1 file changed, 38 insertions(+), 37 deletions(-)
+
+diff --git a/vita3k/kernel/src/load_self.cpp b/vita3k/kernel/src/load_self.cpp
+index 5b46699..99b97c0 100644
+--- a/vita3k/kernel/src/load_self.cpp
++++ b/vita3k/kernel/src/load_self.cpp
+@@ -692,43 +692,6 @@ SceUID load_self(KernelState &kernel, MemState &mem, const void *self, const std
+         }
+     }
+ 
+-    if (kernel.debugger.dump_elfs) {
+-        const uint8_t *dump_begin = is_self ? (image_bytes + self_header.header_len) : elf_bytes;
+-        const uint8_t *dump_end;
+-
+-        if (is_self) {
+-            dump_end = image_bytes + self_header.self_filesize;
+-        } else {
+-            size_t elf_size = 0;
+-            auto dump_segments = reinterpret_cast<const Elf32_Phdr *>(elf_bytes + elf.e_phoff);
+-            for (const auto &[seg_index, segment] : segment_reloc_info) {
+-                uint8_t *seg_bytes = Ptr<uint8_t>(segment.addr).get(mem);
+-                elf_size = std::max(elf_size, static_cast<size_t>(dump_segments[seg_index].p_offset) + static_cast<size_t>(dump_segments[seg_index].p_filesz));
+-            }
+-            dump_end = elf_bytes + elf_size;
+-        }
+-
+-        std::vector<uint8_t> dump_elf(dump_begin, dump_end);
+-        if (is_self) {
+-            dump_elf.resize(self_header.elf_filesize);
+-        }
+-
+-        Elf32_Phdr *dump_segments = reinterpret_cast<Elf32_Phdr *>(dump_elf.data() + elf.e_phoff);
+-        uint16_t last_index = 0;
+-        for (const auto &[seg_index, segment] : segment_reloc_info) {
+-            uint8_t *seg_bytes = Ptr<uint8_t>(segment.addr).get(mem);
+-            memcpy(dump_elf.data() + dump_segments[seg_index].p_offset, seg_bytes, dump_segments[seg_index].p_filesz);
+-            dump_segments[seg_index].p_vaddr = segment.addr;
+-            last_index = std::max(seg_index, last_index);
+-        }
+-        fs::create_directories(dump_path);
+-        const auto start = dump_segments[0].p_vaddr;
+-        const auto end = dump_segments[last_index].p_vaddr + dump_segments[last_index].p_filesz;
+-        const auto elf_name = fs::path(self_path).filename().stem().string();
+-        const auto filename = dump_path / fmt::format("{}-{}_{}.elf", log_hex_full(start), log_hex_full(end), elf_name);
+-        fs_utils::dump_data(filename, dump_elf.data(), dump_elf.size());
+-    }
+-
+     const unsigned int module_info_segment_index = elf.e_entry >> 30;
+     const Ptr<const uint8_t> module_info_segment_address = Ptr<const uint8_t>(segment_reloc_info[module_info_segment_index].addr);
+     const uint8_t *const module_info_segment_bytes = module_info_segment_address.get(mem);
+@@ -804,6 +767,44 @@ SceUID load_self(KernelState &kernel, MemState &mem, const void *self, const std
+     if (!load_imports(*module_info, module_info_segment_address, segment_reloc_info, kernel, mem)) {
+         return -1;
+     }
++
++    if (kernel.debugger.dump_elfs) {
++        const uint8_t *dump_begin = is_self ? (image_bytes + self_header.header_len) : elf_bytes;
++        const uint8_t *dump_end;
++
++        if (is_self) {
++            dump_end = image_bytes + self_header.self_filesize;
++        } else {
++            size_t elf_size = 0;
++            auto dump_segments = reinterpret_cast<const Elf32_Phdr *>(elf_bytes + elf.e_phoff);
++            for (const auto &[seg_index, segment] : segment_reloc_info) {
++                uint8_t *seg_bytes = Ptr<uint8_t>(segment.addr).get(mem);
++                elf_size = std::max(elf_size, static_cast<size_t>(dump_segments[seg_index].p_offset) + static_cast<size_t>(dump_segments[seg_index].p_filesz));
++            }
++            dump_end = elf_bytes + elf_size;
++        }
++
++        std::vector<uint8_t> dump_elf(dump_begin, dump_end);
++        if (is_self) {
++            dump_elf.resize(self_header.elf_filesize);
++        }
++
++        Elf32_Phdr *dump_segments = reinterpret_cast<Elf32_Phdr *>(dump_elf.data() + elf.e_phoff);
++        uint16_t last_index = 0;
++        for (const auto &[seg_index, segment] : segment_reloc_info) {
++            uint8_t *seg_bytes = Ptr<uint8_t>(segment.addr).get(mem);
++            memcpy(dump_elf.data() + dump_segments[seg_index].p_offset, seg_bytes, dump_segments[seg_index].p_filesz);
++            dump_segments[seg_index].p_vaddr = segment.addr;
++            last_index = std::max(seg_index, last_index);
++        }
++        fs::create_directories(dump_path);
++        const auto start = dump_segments[0].p_vaddr;
++        const auto end = dump_segments[last_index].p_vaddr + dump_segments[last_index].p_filesz;
++        const auto elf_name = fs::path(self_path).filename().stem().string();
++        const auto filename = dump_path / fmt::format("{}-{}_{}.elf", log_hex_full(start), log_hex_full(end), elf_name);
++        fs_utils::dump_data(filename, dump_elf.data(), dump_elf.size());
++    }
++
+     const SceUID uid = kernel.get_next_uid();
+     sceKernelModuleInfo->modid = uid;
+     {
+-- 
+2.55.0.windows.5

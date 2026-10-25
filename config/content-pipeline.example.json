@@ -1,0 +1,23 @@
+{
+  "$schema": "./content-pipeline.schema.json",
+  "titleId": "PCSA00107",
+  "archive": {
+    "path": "<absolute-path-to-lawfully-obtained-archive>",
+    "computeSha256": true
+  },
+  "expectedArchiveLayout": {
+    "root": "app/PCSA00107",
+    "requiredEntries": [
+      "app/PCSA00107/eboot.bin",
+      "app/PCSA00107/game_data/data_ngp.psarc",
+      "app/PCSA00107/sce_sys/package/work.bin",
+      "app/PCSA00107/sce_sys/param.sfo"
+    ],
+    "modulePattern": "app/PCSA00107/sce_module/*.suprx"
+  },
+  "vita3k": {
+    "executable": "<private-root>\\vita3k\\Vita3K.exe",
+    "sourceRevision": "<40-character-vita3k-git-commit>"
+  },
+  "privateDataRoot": "<absolute-ignored-private-data-root>"
+}

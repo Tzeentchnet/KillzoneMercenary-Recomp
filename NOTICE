@@ -1,0 +1,13 @@
+Killzone Mercenary Recomp
+Copyright (C) 2026 Killzone Mercenary Recomp contributors
+
+Project-authored files are available under GPL-2.0-or-later. See LICENSE.
+
+The Git submodule at third_party/vitarecomp is a separate work. Its copyright,
+license, and attribution notices remain in that submodule and must be preserved
+when the submodule is redistributed. This top-level notice does not replace or
+modify those notices.
+
+No Killzone Mercenary game content, PlayStation Vita firmware, cryptographic
+keys, retail licenses, or generated title code is licensed or distributed by
+this project.

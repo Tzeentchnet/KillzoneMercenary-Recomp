@@ -1,0 +1,115 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-x64-base",
+      "hidden": true,
+      "displayName": "Windows x64 base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "KZMRECOMP_BUILD_HOST": "ON",
+        "VITARECOMP_BUILD_GPU": "ON",
+        "VITARECOMP_ENABLE_DX12": "ON",
+        "VITARECOMP_ENABLE_VULKAN": "ON",
+        "VITARECOMP_DXC_REQUIRED": "ON"
+      }
+    },
+    {
+      "name": "windows-x64-debug",
+      "displayName": "Windows x64 Debug",
+      "inherits": "windows-x64-base",
+      "binaryDir": "${sourceDir}/out/build/windows-x64-debug",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
+      }
+    },
+    {
+      "name": "windows-x64-relwithdebinfo",
+      "displayName": "Windows x64 RelWithDebInfo",
+      "inherits": "windows-x64-base",
+      "binaryDir": "${sourceDir}/out/build/windows-x64-relwithdebinfo",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "windows-x64-release",
+      "displayName": "Windows x64 Release",
+      "inherits": "windows-x64-base",
+      "binaryDir": "${sourceDir}/out/build/windows-x64-release",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-x64-debug",
+      "configurePreset": "windows-x64-debug",
+      "configuration": "Debug",
+      "targets": [
+        "kzmrecomp_host",
+        "kzmrecomp_host_tests"
+      ]
+    },
+    {
+      "name": "windows-x64-relwithdebinfo",
+      "configurePreset": "windows-x64-relwithdebinfo",
+      "configuration": "RelWithDebInfo",
+      "targets": [
+        "kzmrecomp_host",
+        "kzmrecomp_host_tests"
+      ]
+    },
+    {
+      "name": "windows-x64-release",
+      "configurePreset": "windows-x64-release",
+      "configuration": "Release",
+      "targets": [
+        "kzmrecomp_host",
+        "kzmrecomp_host_tests"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-x64-debug",
+      "configurePreset": "windows-x64-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-x64-relwithdebinfo",
+      "configurePreset": "windows-x64-relwithdebinfo",
+      "configuration": "RelWithDebInfo",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-x64-release",
+      "configurePreset": "windows-x64-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

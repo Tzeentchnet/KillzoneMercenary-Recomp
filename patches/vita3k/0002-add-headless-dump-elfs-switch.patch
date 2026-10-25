@@ -1,0 +1,55 @@
+From c75b7c2dfed0efc55027f460f9dd6f21665777ae Mon Sep 17 00:00:00 2001
+From: Tzeentchnet <58480142+Tzeentchnet@users.noreply.github.com>
+Date: Sat, 24 Oct 2026 21:44:14 -0700
+Subject: [PATCH 2/2] Add headless dump elfs switch
+
+Expose Vita3K's existing opt-in module dump through --dump-elfs and set the debugger flag before module loading. Keep the default disabled and reuse the existing Vita3K dump destination.
+
+License: GPL-2.0-or-later
+---
+ vita3k/config/include/config/config.h | 1 +
+ vita3k/config/src/config.cpp          | 2 ++
+ vita3k/interface.cpp                  | 3 +++
+ 3 files changed, 6 insertions(+)
+
+diff --git a/vita3k/config/include/config/config.h b/vita3k/config/include/config/config.h
+index 2f0b102..42cdee9 100644
+--- a/vita3k/config/include/config/config.h
++++ b/vita3k/config/include/config/config.h
+@@ -180,6 +180,7 @@ using PhysicalKeyCode = input::PhysicalKeyCode;
+     code(std::string, "pref-path", std::string{}, vita_fs_path)                                         \
+     code(bool, "discord-rich-presence", true, discord_rich_presence)                                    \
+     code(bool, "wait-for-debugger", false, wait_for_debugger)                                           \
++    code(bool, "dump-elfs", false, dump_elfs)                                                           \
+     code(bool, "color-surface-debug", false, color_surface_debug)                                       \
+     code(bool, "performance-overlay", false, performance_overlay)                                       \
+     code(int, "performance-overlay-detail", static_cast<int>(MINIMUM), performance_overlay_detail)      \
+diff --git a/vita3k/config/src/config.cpp b/vita3k/config/src/config.cpp
+index df2d9d7..e7dbab2 100644
+--- a/vita3k/config/src/config.cpp
++++ b/vita3k/config/src/config.cpp
+@@ -401,6 +401,8 @@ ExitCode init_config(Config &cfg, int argc, char **argv, const Root &root_paths,
+         ->group("Logging");
+     config->add_flag("--log-uniforms,-U", command_line.log_uniforms, "Log Uniforms")
+         ->group("Logging");
++    config->add_flag("--dump-elfs", command_line.dump_elfs, "Dump loaded code as runtime-relocated ELFs")
++        ->group("Logging");
+     // clang-format on
+ 
+     // Parse the inputs
+diff --git a/vita3k/interface.cpp b/vita3k/interface.cpp
+index e4d898f..10bf4df 100644
+--- a/vita3k/interface.cpp
++++ b/vita3k/interface.cpp
+@@ -448,6 +448,9 @@ static ExitCode load_app_impl(SceUID &main_module_id, EmuEnvState &emuenv, const
+         return KernelInitFailed;
+     }
+ 
++    if (emuenv.cfg.dump_elfs)
++        emuenv.kernel.debugger.dump_elfs = true;
++
+     if (emuenv.cfg.archive_log) {
+         const fs::path log_directory{ emuenv.log_path / "logs" };
+         fs::create_directory(log_directory);
+-- 
+2.55.0.windows.5

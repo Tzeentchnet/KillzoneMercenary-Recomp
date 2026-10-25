@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "titleId": "PCSA00107",
+  "sourceArchive": {
+    "path": "<private-source-archive-path>",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "vita3k": {
+    "sourceRevision": "0000000",
+    "dumpCapability": "--dump-elfs"
+  },
+  "imageFormat": {
+    "elfClass": "ELF32",
+    "byteOrder": "little-endian",
+    "machine": "ARM"
+  },
+  "modules": [
+    {
+      "path": "relative/private-runtime-image.elf",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "fileSize": 512,
+      "moduleInfo": {
+        "name": "replace_locally",
+        "encodedEntry": "0x00000100",
+        "segmentIndex": 0,
+        "segmentOffset": 256,
+        "virtualAddress": "0x10000100"
+      },
+      "programHeaderCount": 1,
+      "loadSegments": [
+        {
+          "index": 0,
+          "fileOffset": 0,
+          "fileSize": 512,
+          "virtualAddress": "0x10000000",
+          "memorySize": 4096,
+          "rangeEndExclusive": "0x10001000",
+          "flags": "r-x",
+          "alignment": 4096
+        }
+      ]
+    }
+  ]
+}
