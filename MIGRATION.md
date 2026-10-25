@@ -21,8 +21,10 @@ GPL-2.0-or-later derivative changes and retain the recorded human authorship.
   submodule.
 - **Ported:** adapted code, documentation, test, fixture, or patch is present.
 - **Reference:** only a curated fact or provenance record was retained.
-- **Deferred:** a precise machine-readable vector names a future canonical
-  integration point; it is not claimed as executing.
+- **Deferred:** at migration time, a precise machine-readable vector named a
+  future canonical integration point and was not claimed as executing. The
+  reconciliation below records cases subsequently promoted to executable
+  canonical coverage.
 - **Rejected:** intentionally omitted from both production repositories.
 
 ## Migration outputs
@@ -42,6 +44,43 @@ Framework repository:
 - `tests/test_prior_aot.c` and `tests/test_dispatch_diagnostic.c`
 - test registration in `tests/CMakeLists.txt` and a documentation link in
   `README.md`
+
+## Foundation-checkpoint reconciliation
+
+The migration is reconciled through framework
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`, which is also the exact game
+gitlink and `config/framework.commit` value. The accepted game verification
+report is `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
+
+| Migrated contract | Final checkpoint disposition |
+|---|---|
+| Checked memory, raw represented state, strict dispatch diagnostics | Executing in canonical public framework tests |
+| ARM/Thumb same-address identity | Executing across discovery, emitted symbols, reachability, and dispatch |
+| Conditional A32 exits and `BLX LR` source capture | Executing in canonical decode/emission regressions |
+| Aligned-PC `TBB`/`TBH` | Executing in canonical discovery/emission regressions |
+| Lane-aware `VST1` and FPSCR flush-to-zero comparison | Executing in canonical emitter/runtime regressions |
+| Exclusive reservation invalidation by ordinary writes | Executing in a cross-thread runtime regression |
+| Deterministic multi-image ordering and overlap | Executing in the game manifest/host layer; framework generation-report composition remains deferred |
+| Full external-oracle state adapter | Optional and deferred; not a production dependency |
+
+The canonical framework also contains the standalone runtime/HLE and shared
+DX12/Vulkan GPU contract. The game contains the Win32 native host and strict
+content/manifest boundary. Neither repository contains the rejected duplicate
+runtime, generated title code, or an embedded Vita3K.
+
+Current framework records:
+
+- [CPU baseline](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/CPU_BASELINE.md)
+- [Runtime/HLE](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/HLE.md)
+- [GPU contract](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/GPU.md)
+- [Provenance](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/PROVENANCE.md)
+
+Clean-clone acceptance and redacted private measurements are in
+[`docs/FOUNDATION_VERIFICATION.md`](docs/FOUNDATION_VERIFICATION.md). Public CI
+passed for framework
+[run 40185631954](https://github.com/Tzeentchnet/vitarecomp/actions/runs/40185631954)
+and game report
+[run 40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323).
 
 ## Source-by-source manifest
 
@@ -105,13 +144,19 @@ The snapshot's ten dirty paths were `docs/FINDINGS.md`, `docs/TODO.md`,
 `tools/vita-recomp/tests/dynarmic_tests.cpp`, and
 `tools/vita-recomp/tests/recomp_tests.cpp`.
 
-Their current (not `HEAD`) behavior is represented by the curated documents
-and fixture IDs for conditional A32 exit fallthrough, `BLX LR`
-capture-before-link, aligned-PC `TBB`, single-lane `VST1` rejection, IT
+Their current (not `HEAD`) behavior was represented at migration time by the
+curated documents and fixture IDs for conditional A32 exit fallthrough,
+`BLX LR` capture-before-link, aligned-PC `TBB`, single-lane `VST1`, IT
 immediate move, wide non-writeback `LDM`, FPSCR flush-to-zero, deterministic
-multi-image behavior, ARM/Thumb keys, and ordinary-write exclusive-reservation
-invalidation. Cases blocked on canonical CPU selection remain explicitly
-`deferred-pending-canonical-cpu-selection`; they are not reported as executing.
+multi-image behavior, ARM/Thumb keys, and ordinary-write
+exclusive-reservation invalidation.
+
+Canonical CPU selection is now complete. The reconciliation table above names
+the cases promoted to executable framework or game coverage. Historical
+fixture status strings remain provenance for the migration snapshot, not a
+claim that every vector executes; wide non-writeback transfer shapes,
+framework-level multi-image report composition, unrepresented full-oracle
+state, and any shapes still in generation trap reports remain deferred.
 
 ## Rejected material
 
@@ -137,5 +182,5 @@ invalidation. Cases blocked on canonical CPU selection remain explicitly
 
 The optional AOT CPU bridge is deliberately outside
 [`patches/vita3k/series`](patches/vita3k/series). Its future oracle adapter is
-blocked only where the canonical CPU/mode-selection seam is required; all
-independent migration work is complete.
+optional and outside the production architecture; all independent migration
+work is complete.

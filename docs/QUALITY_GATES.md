@@ -1,6 +1,8 @@
 # Quality gates
 
 The public Windows workflow requires no secrets or private game data.
+It validates the exact framework gitlink
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`.
 
 | Job | Required coverage |
 |---|---|
@@ -29,3 +31,23 @@ Pinned public tools are hash-verified and extracted only under ignored `out/`.
 The artifact gate permits no binary files in this repository; the framework's
 three reviewed public homebrew fixtures remain confined to the pinned
 submodule.
+
+At the accepted checkpoint, each game configuration passed 13/13 CTests and
+each framework configuration passed 17/17, for 73/73 clean-room CTest
+executions across the matrix. The only environment-dependent acceptance skip
+was the unavailable local D3D12 Graphics Tools/debug layer; it was reported
+explicitly and did not skip WARP/hardware rendering, readback, or lifecycle
+coverage.
+
+Public successful runs:
+
+- framework
+  [40185631954](https://github.com/Tzeentchnet/vitarecomp/actions/runs/40185631954);
+- game tested foundation
+  [40186098886](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40186098886);
+- game verification report
+  [40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323).
+
+See [`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md) for the exact
+clean-clone commands, test inventory, renderer devices, and redacted private
+acceptance.

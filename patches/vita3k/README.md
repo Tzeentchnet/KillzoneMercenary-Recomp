@@ -5,6 +5,8 @@
 This directory contains the minimal generic Vita3K changes required by the
 external content workflow. It does not contain Vita3K source, title bytes,
 title addresses, generated code, user-data paths, or game-specific matching.
+Vita3K remains a separately built and executed extraction/oracle tool; neither
+patch makes it part of the native host or the production CPU path.
 
 ## Pinned base
 
@@ -47,9 +49,11 @@ framework's canonical C API. Copying it would reintroduce a second production
 recompiler and entangle content preparation with CPU selection.
 
 Its broadly reusable state, memory, dispatch, and exclusive-monitor cases were
-migrated as framework tests/fixtures. A future Vita3K oracle adapter must be a
-separate optional series after canonical CPU selection is defined; it must not
-be required to dump modules or run the native application.
+migrated into the canonical framework. At framework
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`, mode-aware CPU/dispatch,
+checked/exclusive-memory, and strict-diagnostic cases execute in public tests.
+Any future full-state Vita3K oracle adapter must be a separate optional series;
+it must not be required to dump modules or run the native application.
 
 ## Validation
 
@@ -57,3 +61,8 @@ The migration validation extracts only the four touched files from the pinned
 base, applies both patches in sequence with `git apply --check`, and scans this
 directory for title identifiers, private paths, and address literals. See the
 top-level [`MIGRATION.md`](../../MIGRATION.md) for recorded results.
+
+The accepted private workflow produced a deterministic three-image manifest,
+but that verifies extraction only. It does not establish title bootability or
+playability; see
+[`docs/FOUNDATION_VERIFICATION.md`](../../docs/FOUNDATION_VERIFICATION.md).

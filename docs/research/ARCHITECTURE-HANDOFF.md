@@ -2,9 +2,12 @@
 
 # Architecture handoff
 
-This record translates the useful historical architecture into the approved
-standalone design. It is not an active TODO list. Evidence labels are defined
-in [`README.md`](README.md).
+This record maps useful evidence from the historical Vita3K hybrid into the
+accepted standalone architecture. It is not an active TODO list. Historical
+evidence labels are defined in [`README.md`](README.md); current production
+status is reconciled against framework
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a` and game report
+`36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
 
 ## Historical system
 
@@ -14,94 +17,109 @@ The prior branch contained three coupled pieces:
 2. an AOT registry/runtime with an optional Dynarmic fallback; and
 3. an opt-in Vita3K CPU backend plus post-link ELF dumping.
 
-- **Verified:** This stack was effective as a correctness laboratory.
-- **Verified:** Its complete-state comparisons, strict-miss path, checked
-  memory adapter, and synthetic/Dynarmic vectors caught real emitter and
-  synchronization bugs.
-- **Verified:** It also coupled production progress to a full emulator tree and
-  duplicated functionality now present in the standalone upstream framework.
+- **Verified:** This stack was useful as a correctness laboratory.
+- **Verified:** Complete-state comparisons, strict misses, checked memory, and
+  synthetic/Dynarmic vectors found real emitter and synchronization defects.
+- **Verified:** It also coupled progress to a full emulator tree and duplicated
+  functionality now implemented in the canonical standalone framework.
 
-## Current repository boundary
+The hybrid is preserved as provenance and evidence only. It is not a dormant
+fallback architecture.
 
-### Framework: `vitarecomp`
+## Accepted production boundary
 
-The canonical upstream C runtime/emitter remains the production path. Reusable
-work migrated here consists of:
+### Framework: `Tzeentchnet/vitarecomp`
 
-- focused tests against the existing C CPU, VFP, memory, dispatch, and trap
-  APIs;
-- machine-readable vectors for behavior whose canonical integration point does
-  not exist yet;
-- explicit overlap, deterministic ordering, ARM/Thumb key, CPU-state, checked
-  memory, strict-miss, and exclusive-monitor contracts; and
-- a migration record naming each deferred integration point.
+The framework owns the production static generated-C path:
 
-The complete historical C++ tool was rejected. It remains snapshot/reference
-material, not a second production recompiler.
+- SELF/ELF/relocation parsing, ARM/Thumb discovery, deterministic partitioned C
+  emission, reports, and strict traps;
+- checked CPU/memory/dispatch behavior, standalone runtime/HLE, threading,
+  synchronization, allocators, imports, I/O, VFS, and lifecycle;
+- the renderer-neutral versioned C GPU ABI; and
+- production DX12 and Vulkan backends plus public conformance tests.
+
+The exact game gitlink is
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The complete historical C++ tool
+was rejected rather than retained as a second production recompiler.
 
 ### Game repository
 
 This repository owns title policy and local workflow glue:
 
 - curated research without private payloads;
-- content-aware staging of locally generated sources;
-- minimal patches for an external pinned Vita3K checkout; and
-- title-specific host/configuration work added by later checkpoints.
+- PCSA00107 archive inspection, external Vita3K orchestration, and independent
+  deterministic runtime-image manifests;
+- content-aware staging of locally generated source;
+- strict native-host CLI/content validation and a read-only `app0:` mount;
+- Win32 lifecycle and explicit DX12/Vulkan selection; and
+- future title-specific bindings and compatibility work.
 
-Generated translated code belongs only in ignored local output roots.
+Generated translated code, reports, private manifests, content, traces, and
+captures belong only in ignored local roots.
 
 ### External Vita3K
 
-- **Verified:** Vita3K is needed to install/decrypt authorized content and to
-  capture runtime-addressed module images after linking.
-- **Derived:** Vita3K may remain an optional semantic oracle during framework
-  development.
-- **Verified decision:** Vita3K is not vendored and its historical AOT CPU
-  bridge is not a production dependency.
+- **Verified:** Vita3K can install/decrypt authorized content and capture
+  runtime-addressed modules after relocation and export/import linking.
+- **Verified:** The required patch series contains only post-link dump ordering
+  and an explicit headless `--dump-elfs` switch.
+- **Allowed:** A separately executed Vita3K may be used as an optional
+  behavioral oracle.
+- **Rejected:** Vita3K is not vendored, linked, or used for production CPU,
+  HLE, graphics, or fallback execution.
 
-The required patch series contains only the generic post-link dump ordering and
-an explicit headless switch. The optional AOT CPU bridge is separately
-documented and deferred because it depends on the rejected duplicate C++
-runtime and on pending canonical CPU selection.
+The historical AOT CPU bridge remains outside the required patch series.
 
-## Contracts retained from the prior branch
+## Migrated contracts at the accepted checkpoint
 
-| Contract | Evidence | New integration |
+| Contract | Current status | Evidence/integration |
 |---|---|---|
-| Capture after relocation/export/import linking | Verified | Required Vita3K patch 0001 |
-| Explicit, headless dump opt-in | Verified | Required Vita3K patch 0002 |
-| Stable generated-source identities | Verified | `tools/generated/Stage-GeneratedSources.ps1` |
-| Checked guest memory | Verified | Canonical framework tests plus deferred vectors |
-| Complete raw CPU/VFP comparison | Verified | Canonical state-surface test plus oracle fixture |
-| Mode-aware code identity | Verified | Deferred collision vector pending canonical CPU selection |
-| Strict source+target dispatch diagnostics | Verified | Canonical trace diagnostic test |
-| Deterministic multi-image composition | Verified | Machine-readable fixture pending image-set API |
-| Exclusive monitor/write serialization | Verified | Deferred fixture pending scheduler/CPU ownership |
+| Capture after relocation/export/import linking | **Implemented and verified** | Required Vita3K patch 0001; private three-image repeat |
+| Explicit headless dump opt-in | **Implemented and verified** | Required Vita3K patch 0002; wrapper capability checks |
+| Stable generated-source identities | **Implemented and verified** | `Stage-GeneratedSources.ps1` plus public regression |
+| Checked guest memory | **Implemented and verified** | Framework runtime and prior-AOT tests |
+| Raw CPU/VFP state behavior | **Implemented and verified for represented state** | Framework CPU/runtime tests |
+| ARM/Thumb mode-aware discovery and dispatch | **Implemented and verified** | Public discovery/emitter/dispatch regressions |
+| Conditional A32 exits and `BLX LR` source capture | **Implemented and verified** | Public decode/emission regressions |
+| Aligned-PC `TBB`/`TBH` handling | **Implemented and verified** | Public discovery/emission regressions |
+| Lane-aware `VST1` behavior and FPSCR FZ comparison | **Implemented and verified** | Public CPU/emitter regressions |
+| Exclusive monitor/write invalidation | **Implemented and verified** | Cross-thread framework runtime test |
+| Strict source/target dispatch diagnostics | **Implemented and verified** | Exact diagnostic test; default remains aborting |
+| Deterministic runtime-image ordering/overlap rejection | **Implemented and verified in the game manifest layer** | Synthetic and private repeat validation |
+| Multi-image `armrecomp` report composition | **Deferred** | Generator still reports each image independently |
+| Full external-oracle state adapter | **Deferred and optional** | Not required by production or extraction |
 
-## Deferred semantic cases
+The accepted private CPU repeat generated and compiled all three modules, but
+its 3,770 explicit traps remain title-entry blockers. “Generated successfully”
+is not a bootability claim.
 
-The following current-snapshot fixes are preserved as precise fixtures rather
-than inaccurately claimed as running against the present C emitter:
+## Remaining retained fixtures
 
-- predicate-false fallthrough for conditional A32 `BL`, register `BLX`, `BX`,
-  and `SVC`;
-- `BLX LR` source capture before link-register update;
-- Thumb PC alignment for `TBB`/`TBH`;
-- lane-versus-whole-register `VST1` validation;
-- FPSCR flush-to-zero comparison behavior;
-- wide non-writeback `LDM` commit ordering;
-- exclusive reservation invalidation under the monitor lock; and
-- same-aligned-address ARM/Thumb registry entries.
+Most semantic cases that were initially recorded as deferred were promoted
+into canonical executable tests during CPU/runtime integration. Retained
+non-production evidence still covers:
 
-Each fixture names the exact future source/test seam. They should become
-executable tests when that seam is implemented, without importing the old
-runtime wholesale.
+- deterministic framework-level composition of multiple per-image generation
+  reports, which has no canonical merger API;
+- any state items not represented by the production CPU ABI, including a
+  future full external-oracle comparison surface; and
+- instruction or transfer shapes still reported by the accepted private trap
+  census.
+
+These are explicit future integration points, not claims that a hidden hybrid
+path can execute them. New behavior must land in the canonical framework with
+public synthetic coverage.
 
 ## Rejected historical material
 
 - the full modified Vita3K source tree;
-- the complete C++ recompiler/runtime as production code;
-- GUI and Android configuration changes unnecessary for the external workflow;
+- the complete C++ recompiler/runtime and Dynarmic fallback as production code;
+- GUI and Android configuration unrelated to external extraction;
 - private title inputs, generated blocks, traces, smoke logs, and addresses;
 - the unrelated PS2Recomp backlog note; and
-- the old live TODO's hybrid-specific promotion queue.
+- the old hybrid-specific promotion queue as a project tracker.
+
+Current architecture and ordered work now live in
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md) and
+[`../ROADMAP.md`](../ROADMAP.md).

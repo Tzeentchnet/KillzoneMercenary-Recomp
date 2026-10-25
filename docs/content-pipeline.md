@@ -5,6 +5,22 @@ keys, decrypted images, or generated code. These tools only inspect content
 that the user supplies and keep every Vita3K write and ELF manifest below an
 explicit private root. Use content obtained and processed lawfully.
 
+## Checkpoint status and scope
+
+| Classification | Content behavior |
+|---|---|
+| **Implemented** | Read-only ZIP inspection; isolated portable Vita3K orchestration; independent ELF/range/hash/overlap validation; deterministic private manifest generation; host-side revalidation and read-only mount |
+| **Verified** | Protected PCSA00107 archive classification; dry-run and synthetic suites; repeat byte-identical three-image manifest; real host mount with path/hash redaction |
+| **Deferred** | Static title generation provenance, title entry, and local native package assembly |
+| **Out of scope** | Key/PFS derivation or extraction, credential handling, publishing private/generated outputs, or using Vita3K in the native runtime |
+
+The accepted revisions are game
+`36fef0e94ab99d1fc6e1903f02a388013eb3585d` and framework/gitlink
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. Aggregate acceptance evidence is
+in [`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md). Passing this
+pipeline proves content readiness and isolation; it does not prove title boot
+or playability.
+
 ## 1. Inspect an archive without extracting it
 
 `Inspect-KillzoneDump.ps1` reads the ZIP central directory and small signature
@@ -62,6 +78,8 @@ credentials; the wrapper has no parameters for them.
 
 The source revision must be the Git commit used to build that executable. Keep
 the corresponding source and patch provenance separately from private content.
+The required source-only patch series and pinned Vita3K base are documented in
+[`../patches/vita3k/README.md`](../patches/vita3k/README.md).
 
 ## 3. Dry-run, install, and dump
 
@@ -195,3 +213,21 @@ images have passed the independent validator. Use a clean ignored portable
 root, confirm `--dump-elfs` in Vita3K help, ensure the title dump directory is
 empty, run the `Install` and `Dump` phases, and close Vita3K only after the
 required modules have loaded. UI automation is neither required nor assumed.
+
+## Boundary after manifest creation
+
+The manifest and runtime images remain private inputs. The host may validate
+and mount them for a renderer self-test:
+
+```powershell
+out\build\windows-x64-debug\Debug\kzmrecomp_host.exe `
+  --content-root='<private-runtime-image-root>' `
+  --manifest='<private-runtime-manifest>' `
+  --self-test --renderer=dx12 --adapter=warp --frames=4
+```
+
+Without `--self-test`, the same valid input reaches the explicit
+`title_not_implemented` event and exits 9. Static generation, generated-source
+provenance, and local-only packaging remain ordered gates in
+[`ROADMAP.md`](ROADMAP.md); no generated title output may be committed while
+those gates are implemented.

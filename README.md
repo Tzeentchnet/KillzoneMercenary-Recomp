@@ -7,26 +7,36 @@ the PlayStation Vita release of *Killzone Mercenary* (PCSA00107).
 
 ## Current status
 
-The repository now contains a real C++20 Windows x64 native host linked to the
-standalone `vitarecomp` runtime and its production DX12/Vulkan GPU contract.
-The host validates an explicit external runtime-image manifest, mounts the
-validated content root as read-only `app0:`, and can run the framework
-clear/triangle conformance scene through either explicitly selected backend.
-It has no Vita3K runtime dependency and no JIT.
+The first foundation checkpoint is complete and independently verified. This
+repository is pinned to
+[`vitarecomp@f3408e1`](https://github.com/Tzeentchnet/vitarecomp/tree/f3408e1ea73b724c7ba3a644633938c220f2cc2a),
+which provides the static generated-C CPU pipeline, standalone runtime/HLE,
+shared GPU contract, and production DX12/Vulkan backends. The game repository
+provides a C++20 Windows x64 host, strict external-content validation,
+read-only `app0:` mounting, explicit renderer selection, and a bounded
+clear/triangle conformance scene.
 
 Title execution remains deliberately disabled. No translated Killzone code is
-loaded or called until generated-code provenance and strict import/HLE
-preconditions exist. This repository still contains no game data, generated
-title code, firmware, keys, or playable build. See
-[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for the exact checkpoint and
-validation evidence.
+loaded or called; normal title mode exits 9 at the explicit
+`title_not_implemented` boundary. The accepted CPU measurement still contains
+explicit traps, and startup import/HLE/GXM preconditions are not yet closed.
+This repository contains no game data, generated title code, firmware, keys,
+or playable build. See the [current architecture](docs/ARCHITECTURE.md),
+[project status](docs/PROJECT_STATUS.md), [verification
+report](docs/FOUNDATION_VERIFICATION.md), and measurable
+[post-foundation roadmap](docs/ROADMAP.md).
 
 The reusable recompilation framework is pinned as the
 `third_party/vitarecomp` Git submodule. Clone recursively, or initialize it
 after cloning:
 
 ```powershell
+git clone --recurse-submodules `
+  https://github.com/Tzeentchnet/KillzoneMercenary-Recomp.git `
+  KillzoneMercenary-Recomp
+Set-Location KillzoneMercenary-Recomp
 git submodule update --init --recursive
+git submodule status
 ```
 
 ## Content boundary
@@ -62,7 +72,8 @@ ctest --preset windows-x64-debug
 
 Equivalent `windows-x64-relwithdebinfo` and `windows-x64-release` presets are
 provided. More details are in [docs/BUILDING.md](docs/BUILDING.md), including
-the public-only [quality gates](docs/QUALITY_GATES.md).
+the exact clean-clone verification commands and public-only
+[quality gates](docs/QUALITY_GATES.md).
 
 ## Native host
 
@@ -80,10 +91,24 @@ Paths and content hashes are redacted from structured logs. See
 [docs/NATIVE_HOST.md](docs/NATIVE_HOST.md) for manifest rules, exit codes, and
 the title-execution boundary.
 
+Vulkan can be selected just as explicitly:
+
+```powershell
+out\build\windows-x64-debug\Debug\kzmrecomp_host.exe `
+  --self-test --renderer=vulkan --adapter=hardware `
+  --validation --frames=4
+```
+
+An unavailable backend, adapter, or requested validation layer is an error.
+The host never falls back from Vulkan to DX12, from hardware to WARP, or to an
+emulator/JIT.
+
 ## Migrated engineering material
 
 - [Research record](docs/research/README.md) — curated findings, architecture
   handoff, and asset-format facts with explicit evidence labels
+- [Current architecture](docs/ARCHITECTURE.md) — production boundaries,
+  private-data rules, test layers, and strict error/no-fallback policy
 - [Generated-source staging](tools/generated/Stage-GeneratedSources.ps1) —
   content-aware local staging with a
   [synthetic regression](tests/Test-StageGeneratedSources.ps1)
@@ -91,6 +116,8 @@ the title-execution boundary.
   dumping against a pinned external checkout
 - [Migration manifest](MIGRATION.md) — per-source provenance, disposition,
   deferred integration points, and validation evidence
+- [Post-foundation roadmap](docs/ROADMAP.md) — ordered, measurable gates from
+  strict title entry through local-only package generation
 
 ## Repository layout
 
@@ -117,6 +144,23 @@ The guard rejects known private/generated path classes. Optional private roots
 can be listed in ignored `config/private-roots.txt` or in the
 `KZM_RECOMP_PRIVATE_ROOTS` environment variable (semicolon-separated on
 Windows). The guard complements review; it is not a legal-content detector.
+
+## Verified public evidence
+
+The accepted checkpoint used framework
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a` and game report revision
+`36fef0e94ab99d1fc6e1903f02a388013eb3585d`. The complete matrix and redacted
+private acceptance are recorded in
+[docs/FOUNDATION_VERIFICATION.md](docs/FOUNDATION_VERIFICATION.md).
+
+Public hosted runs:
+
+- framework [Windows quality gates
+  40185631954](https://github.com/Tzeentchnet/vitarecomp/actions/runs/40185631954);
+- game foundation [Windows quality gates
+  40186098886](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40186098886);
+- game verification report [Windows quality gates
+  40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323).
 
 ## License and trademarks
 

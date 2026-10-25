@@ -1,232 +1,210 @@
-# Project Status and Handoff
+# Project status and handoff
 
-Checkpoint: 2026-10-25
+Checkpoint accepted: 2026-10-25
 
-## Current boundary
+Status: **first foundation checkpoint complete and verified**
 
-The canonical CPU, standalone runtime/HLE, DX12, and Vulkan work is merged on
-framework `main` at `8bf490e`. This game repository now contains the native
-Windows x64 host scaffold and framework conformance path.
+This is a native-foundation checkpoint, not a title-boot or playability
+checkpoint. The host validates and mounts a user-supplied runtime-image set,
+but it does not load or call generated Killzone code. Non-self-test title mode
+emits `title_not_implemented` and exits 9.
 
-Do not infer title bootability or playability from this checkpoint. Valid
-external content is checked and mounted read-only, but translated Killzone
-code is neither loaded nor executed. Non-self-test title mode exits through a
-documented `not implemented` path until generated-code provenance, strict
-import coverage, and title HLE/GXM preconditions are measurable.
+## Revision record
 
-## Repository state
-
-### Framework
-
-- Repository: `Tzeentchnet/vitarecomp`
-- Remote: `Tzeentchnet/vitarecomp`
-- Mainline: `8bf490e` (`Merge runtime foundation`)
-- Upstream pin: `6ed4a5c`
-- Mainline is clean, pushed, and synchronized with `origin/main`.
-- License: GPL-2.0-or-later for the combined derivative, with upstream MIT
-  license and provenance retained.
-
-Historical renderer branches merged into current main:
-
-| Purpose | Commit | State |
+| Component | Accepted revision | State |
 |---|---|---|
-| DX12 backend | `a19d340` | Complete in isolated branch |
-| Vulkan backend | `d2e0c8b` | Complete in isolated branch |
-| Combined renderers | `b1754cd` | Merged and validated |
+| Framework `Tzeentchnet/vitarecomp` | `f3408e1ea73b724c7ba3a644633938c220f2cc2a` | `main`, clean, pushed, framework CI green |
+| Game verification report | `36fef0e94ab99d1fc6e1903f02a388013eb3585d` | `main`, clean, pushed, game CI green |
+| Game framework gitlink | `f3408e1ea73b724c7ba3a644633938c220f2cc2a` | Matches `config/framework.commit` |
+| Preserved upstream framework baseline | `6ed4a5c59045706292c8ec03dfe5207ecc4033a4` | Tagged `upstream-start-6ed4a5c5` |
 
-The renderer branches were rebased through the canonical CPU work and merged
-with the standalone runtime foundation. The game submodule is pinned to exact
-commit `8bf490e6702eae69d07a74dd9397c1e32e7a6dbc`.
+The report commit follows the independently tested game target
+`5b013f5967e68acfdf89573ffcaeb1a13aa76029`; it changes only
+[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md). Run
+[40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323)
+then passed the complete game workflow on the report head.
 
-### Game project
+The framework retains the upstream MIT license and provenance while the
+modified combined work is distributed under GPL-2.0-or-later. The game
+repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
+`LICENSES/`, and provenance records remain authoritative.
 
-- Repository: `Tzeentchnet/KillzoneMercenary-Recomp`
-- Remote: `Tzeentchnet/KillzoneMercenary-Recomp`
-- The public `main` branch contains the source-only foundation and native host
-  checkpoint.
-- Content pipeline, research migration, Vita3K patch series, staging tools,
-  host sources, tests, and documentation are preserved together.
-- `third_party/vitarecomp` is pinned to the full commit recorded in
+## Meaning of status terms
+
+- **Implemented:** production source and public contract tests exist at the
+  accepted revisions.
+- **Verified:** the behavior passed the clean-clone matrix or the separately
+  described redacted private acceptance.
+- **Deferred:** it is ordered in [`ROADMAP.md`](ROADMAP.md) but is not a
+  capability claim.
+- **Intentionally out of scope:** the architecture forbids it; it is not a
+  future fallback plan.
+
+## Implemented
+
+### Two-repository and provenance foundation
+
+- The reusable framework and title-specific project are separate public
+  repositories.
+- The game consumes the exact framework revision through
+  `third_party/vitarecomp`; a quality gate checks the gitlink against
   `config/framework.commit`.
+- Historical work was curated by source path and license. The old duplicate
+  C++ recompiler, complete Vita3K tree, hybrid production CPU, stale TODOs,
+  private artifacts, and unrelated notes were not imported.
+- The framework's CPU, runtime/HLE, GPU, provenance, and quality documentation
+  is linked from [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-### Preserved prior work
+### Static CPU and generated-code boundary
 
-The previous dirty Vita3K/AOT branch was captured as a private-free session
-artifact without modifying its source repository. The snapshot contains six
-committed patches, three dirty-state patches, metadata, checksums, path
-classification, and the 45 reusable changed files. Private game data,
-generated title sources, traces, keys, and build output were excluded.
+- `armrecomp` handles the accepted ELF/SCE relocation, ARM/Thumb mode,
+  discovery, target promotion, jump-table, MOVW/MOVT pointer, measured
+  VFP/NEON, checked/exclusive-memory, partition, report, and strict-trap
+  contracts.
+- Generated title C is local, ignored, and never tracked. Content-aware staging
+  preserves unchanged files, removes only stale managed files, and has a
+  synthetic regression.
+- The production architecture has no JIT, interpreter, Dynarmic dependency,
+  emulator runtime, or missing-target continuation fallback.
 
-## Completed work
+### Standalone runtime and HLE foundation
 
-### Repository and provenance foundation
+- Checked guest memory, mode-aware dispatch, raw CPU/VFP state, TLS CPU
+  ownership, deterministic scheduling, threading and synchronization,
+  allocators, libc/libm, import registration, title-neutral kernel/I/O/FIOS2/
+  ULT subsets, VFS, PSARC, diagnostics, restart, and teardown are present.
+- `app0:` is forced read-only. Guest paths reject traversal, host absolute
+  paths, extra drive separators, and symlink/reparse escapes.
+- Missing imports and unsupported operations return explicit failures or named
+  traps rather than zero/success placeholders.
 
-- Forked `sp00nznet/vitarecomp` to `Tzeentchnet/vitarecomp`.
-- Preserved `origin`, `upstream`, and comparison remotes.
-- Added combined-work licensing, notices, provenance, and an upstream start
-  tag.
-- Initialized the separate game repository and framework submodule.
-- Added Windows x64 CMake presets, content policy, ignore rules, and a staged
-  private-content guard.
+### External content workflow
 
-### Prior-material migration
+- The ZIP inspector reads the central directory and bounded signatures without
+  extraction and classifies protected retail NoNpDRM/PFS content honestly.
+- A portable, external Vita3K build can install/decrypt authorized user content
+  and dump runtime ELF images only after relocation and import/export linking.
+- The manifest tool independently validates ELF32/little-endian/ARM structure,
+  module metadata, ranges, overlap, ordering, sizes, and hashes.
+- The wrapper confines all Vita3K state and outputs to an explicit private
+  root, exposes no key/license parameters, and stops only its exact spawned
+  process.
+- The source tree and index are protected by path-focused staged/tracked
+  guards. Review remains mandatory.
 
-- Curated verified findings, architecture handoff, and asset-format research.
-- Migrated content-aware generated-source staging with synthetic tests.
-- Added a minimal two-patch Vita3K series for post-link ELF dumping.
-- Converted broadly reusable AOT findings into canonical runtime tests and 17
-  machine-readable semantic vectors.
-- Explicitly rejected the duplicate production C++ recompiler, complete
-  Vita3K vendoring, stale TODOs, private artifacts, and unrelated PS2 notes.
+### Shared GPU and native host
 
-### Retail content pipeline
+- A versioned C GPU ABI defines opaque handles, ownership, resources, binding,
+  command ordering, queues, transitions, timeline fences, swapchains,
+  readback, structured errors, and deterministic teardown.
+- Production Direct3D 12 and Vulkan implementations use one HLSL source
+  compiled by pinned DXC `1.8.2505.32` to DXIL and SPIR-V.
+- The C++20 Win32 x64 host links only the standalone framework runtime and GPU
+  targets. It validates its CLI, configuration, content manifest, ELF metadata,
+  ranges, paths, and hashes before mounting content.
+- Renderer, adapter, and validation choices are explicit. An unavailable
+  request fails and never selects a different backend or adapter class.
+- The public host self-test exercises window creation, minimize/restore,
+  resize/recreate, clear/triangle rendering, readback, and reverse-order
+  shutdown.
 
-- Added read-only NoNpDRM ZIP inspection without extraction.
-- Added external Vita3K install/dump orchestration with no key handling.
-- Added ELF32/ARM segment, overlap, hash, and deterministic manifest
-  validation.
-- Added public configuration schema/examples and synthetic tests.
-- Verified the supplied PCSA00107 archive:
-  - 3,230,395,399 bytes;
-  - 866 entries;
-  - five packaged executable modules;
-  - correctly classified as protected retail PFS/NoNpDRM.
-- Completed a fresh isolated Vita3K dump:
-  - three stable ELF32/ARM runtime modules;
-  - deterministic manifest;
-  - byte-identical repeat validation;
-  - only the exact spawned Vita3K PID was stopped.
+## Verified
 
-### Downstream audit and CPU selection
+### Clean-clone public matrix
 
-- Audited 29 Shiz0id commits and 94 soyjxck commits against upstream.
-- Reproduced:
-  - Shiz0id default tests: 4/4;
-  - soyjxck default/OpenGL tests: 15/15;
-  - all three public soyjxck end-to-end fixtures.
-- Measured upstream, soyjxck, Shiz0id, and the prior local analyzer against the
-  same private Killzone runtime image set.
-- Selected upstream's generated-C/runtime ABI with coherent soyjxck CPU topics
-  as the canonical production path.
-- Integrated:
-  - retail ELF and SCE relocation handling;
-  - ARM/Thumb mode keys;
-  - corrected discovery and target promotion;
-  - jump tables and MOVW/MOVT pointer recovery;
-  - NEON/VFP and checked/exclusive memory helpers;
-  - partitioned generation;
-  - strict traps and deterministic reports; and
-  - prior semantic regressions.
+- Framework Debug and Release: 17/17 CTests in each configuration.
+- Game Debug, RelWithDebInfo, and Release: 13/13 CTests in each configuration.
+- Total clean-room matrix: 73/73 CTest executions.
+- MSVC warnings were errors; generated framework C used `/bigobj`.
+- DX12, Vulkan, DXIL, and SPIR-V sources/outputs were required in generated
+  projects.
+- Three reviewed public homebrew fixtures completed extract, emit twice,
+  byte-compare, and warnings-clean generated-C compilation.
+- Public PowerShell content, staging, and guard suites passed under Windows
+  PowerShell 5.1 and PowerShell 7.
+- JSON schemas/examples, Markdown links, CMake presets, workflow syntax,
+  licenses, exact submodule pin, deterministic artifact inventory, and
+  private-content guards passed.
 
-### Renderer foundation
+### Renderer and host acceptance
 
-- Added a versioned, opaque-handle C GPU ABI and C++20 internals.
-- Added strict lifecycle, resource-state, command-order, fence, resize, error,
-  and shader-request tests.
-- Pinned DXC `1.8.2505.32` and defined one HLSL path to DXIL and SPIR-V.
-- Implemented real production DX12 and Vulkan backends.
-- Combined them in one validated integration branch with explicit no-fallback
-  behavior.
+- Framework DX12 WARP and hardware paths passed three complete
+  startup/resize/shutdown iterations with stable readback.
+- Validation-enabled Vulkan passed two resize/recreate cycles on available
+  hardware.
+- Host DX12 WARP, DX12 hardware, and validation-enabled Vulkan self-tests
+  passed.
+- Invalid Vulkan ICD and unavailable adapter tests returned explicit errors and
+  did not fall back.
+- The wrong DXC version was rejected during configure.
+- The local D3D12 Graphics Tools/debug layer was unavailable and reported as
+  the single environment-dependent skip. Rendering, readback, lifecycle, and
+  hardware/WARP coverage still passed.
 
-### Native Windows host
+### Redacted private acceptance
 
-- Added a C++20 Windows x64 GUI-subsystem host with inherited/CLI console
-  handling and non-interactive failure reporting.
-- Linked only the pinned standalone runtime and renderer-neutral GPU targets;
-  there is no Vita3K runtime dependency or JIT.
-- Added strict CLI/config parsing for explicit content, manifest, renderer,
-  adapter, validation, logging, self-test frames, and help.
-- Added independent runtime-manifest/ELF/range/hash validation with path,
-  symlink/reparse, traversal, protected-input, title-ID, and overlap rejection.
-- Mounted validated external content as read-only `app0:` and verified both
-  traversal and write denial through the framework VFS.
-- Added structured redacted logging and documented actionable exit codes.
-- Added explicit backend/adapter selection with no fallback, Win32
-  minimize/restore/resize handling, deterministic GPU/runtime/window teardown,
-  and final clear/triangle readback validation.
-- Kept title execution disabled with no generated-code load and no
-  success-shaped title stub.
+- A supplied PCSA00107 archive was inspected read-only: 866 central-directory
+  entries, five packaged executable modules, expected NoNpDRM record, and
+  protected outer PFS classification.
+- Three post-link ELF32/ARM runtime images produced byte-identical manifests
+  across repeat validation.
+- Two static-generation runs each produced 809 files and 356,792,679 bytes;
+  every file and report was byte-identical.
+- All 800 generated C translation units across three modules compiled with
+  MSVC `/W4 /WX /permissive- /bigobj` and no diagnostics.
+- Measured CPU coverage was 10,898,202 of 11,308,620 executable bytes
+  (96.370751%); 3,663,088 of 3,666,858 emitted instruction instances
+  translated (99.897187%).
+- The remaining 3,770 explicit traps are visible readiness failures, not
+  hidden continuation behavior.
+- The host independently validated and mounted the real manifest read-only,
+  ran both renderer self-tests, redacted all paths/hashes, and preserved exit 9
+  for title mode.
+- Host dependencies and generated link inputs contained no Vita3K, Dynarmic,
+  LLVM/JIT, or emulator runtime.
 
-## Validation evidence
+Complete commands, devices, metrics, redaction rules, and history scans are in
+[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md).
 
-### Framework mainline (`8bf490e`)
+## Public CI evidence
 
-- MSVC with `/W4 /WX /permissive- /bigobj`.
-- Canonical CPU, runtime/HLE, DX12, and Vulkan histories merged.
-- Complete framework CTest: 17/17 passed at the framework checkpoint.
-- Three public homebrew end-to-end fixtures passed.
-- All three private runtime modules generated and compiled.
-- Repeat generation: 809 files byte-identical.
-- Measured byte coverage: 96.370751%.
-- Measured translation yield: 99.897187%.
-- Explicit traps: 3,770.
-- Generated partitions: 37.
+- Framework accepted head:
+  [Windows quality gates 40185631954](https://github.com/Tzeentchnet/vitarecomp/actions/runs/40185631954)
+- Game tested foundation:
+  [Windows quality gates 40186098886](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40186098886)
+- Game verification-report head:
+  [Windows quality gates 40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323)
 
-### Combined renderer branch (`b1754cd`)
+All three completed successfully. The workflow badges and latest public runs
+remain available from each repository's Actions page.
 
-- MSVC Debug build passed with warnings as errors.
-- CTest: 12/12 passed.
-- DX12 WARP and NVIDIA hardware conformance passed through three
-  resize/startup/shutdown iterations with stable hashes.
-- Vulkan validation-enabled conformance passed on an NVIDIA RTX 5070 through
-  two complete resize/recreate cycles.
-- Invalid Vulkan ICD returned the explicit unavailable/skip path without
-  falling back to DX12.
-- Mismatched DXC version was rejected.
-- D3D12 Graphics Tools/debug layer was not installed; that unavailability was
-  reported explicitly rather than silently ignored.
+## Deferred
 
-### Game repository
+The ordered measurable backlog is maintained in
+[`ROADMAP.md`](ROADMAP.md):
 
-- CMake configure/build passed for Debug, RelWithDebInfo, and Release with
-  MSVC warnings as errors.
-- CTest: 12/12 passed in all three configurations.
-- DX12 WARP and available hardware host self-tests passed.
-- Validation-enabled Vulkan host self-test passed.
-- Explicit unavailable adapter and invalid-Vulkan-ICD no-fallback tests passed.
-- Synthetic manifest/content integration rejected changed hashes, traversal,
-  overlapping ranges, wrong title ID, and protected/not-ready images.
-- The existing private three-module manifest independently validated, mounted
-  read-only, and completed the DX12 WARP host self-test without emitting a
-  private path or hash.
-- Win32 resize/lifecycle and three repeated WARP startup/shutdown runs passed.
-- Content pipeline synthetic suite: nine cases under PowerShell 7 and Windows
-  PowerShell 5.1.
-- Generated-source staging regression passed.
-- Private-content guard passed.
-- Vita3K patches apply sequentially to their pinned base.
+1. strict title-entry execution and generated-source provenance;
+2. startup imports, threading, TLS, and filesystem behavior;
+3. guest GXM scene capture through the shared GPU contract;
+4. GXP reflection and USSE-to-HLSL shader integration;
+5. DX12/Vulkan parity for title frames;
+6. audio, input, save, and movie services;
+7. named gameplay-progression checkpoints;
+8. correctness-preserving performance work; and
+9. local-only generation/build/package workflow.
 
-## Ordered next steps
+None is implemented merely because its lower-level framework dependency
+exists. Title entry remains blocked until gate 1 closes.
 
-### 1. Define strict title-execution readiness
+## Intentionally out of scope
 
-1. Add a generated-source provenance manifest without tracking generated code.
-2. Derive and register the complete reachable import set with unsupported
-   imports returning explicit failures.
-3. Define module load/relocation/TLS/entry preconditions and test each with
-   synthetic public fixtures.
-4. Keep the current `title_not_implemented` exit until every gate passes.
-
-### 2. Bring up title services incrementally
-
-1. Establish measured module loading, imports, threading, and filesystem
-   behavior.
-2. Capture and reproduce GXM scenes through the renderer-neutral contract.
-3. Integrate GXP/USSE translation through the common pinned-DXC path.
-4. Add input, audio, movies, saves, and remaining services only with explicit
-   unsupported results and focused tests.
-
-### 3. Add quality gates and keep the foundation reproducible
-
-1. Add Windows CI for framework and game repositories.
-2. Build both renderers and all generated-C/public fixtures.
-3. Run formatting, static analysis, warnings-as-errors, and content guards.
-4. Keep GPU-dependent tests explicit about hardware/ICD availability.
-5. Complete the clean-clone acceptance matrix before beginning GXM/title
-   bring-up.
-
-## Deferred title bring-up
-
-Gameplay progression, DX12/Vulkan title-frame parity, and user-facing title
-services remain deferred. They retain the strict no-JIT/no-emulator and
-source-only content boundaries described above.
+- PFS/key derivation, key extraction, credential handling, or distributing
+  decrypted/retail content.
+- Tracking or publishing generated Killzone code, private manifests, traces,
+  captures, shader caches, saves, or locally generated packages.
+- Vendoring or linking Vita3K, using an emulator as the native runtime, or
+  restoring the historical hybrid AOT CPU.
+- Runtime JIT/interpreter fallback, renderer fallback, silent import success,
+  unchecked guest access, or success-shaped unsupported GPU/HLE behavior.
+- A claim that the title boots, reaches gameplay, or is playable at this
+  checkpoint.

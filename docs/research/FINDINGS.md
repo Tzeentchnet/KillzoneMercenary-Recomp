@@ -4,7 +4,10 @@
 
 This is a source-only handoff of reusable evidence from the verified prior AOT
 snapshot. Exact title addresses, private hashes, generated code, and traces are
-omitted. Evidence labels are defined in [`README.md`](README.md).
+omitted. Evidence labels are defined in [`README.md`](README.md). Historical
+findings below are reconciled with the accepted framework
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`; current integration status does
+not retroactively change the original evidence label.
 
 ## Architecture status
 
@@ -42,6 +45,10 @@ omitted. Evidence labels are defined in [`README.md`](README.md).
   runtime address ranges, and reject a mixture of pre-link and post-link
   images.
 
+**Current integration:** The game manifest records the post-link dump
+capability, per-module metadata/ranges, deterministic relative identities,
+sizes, and hashes. The host independently validates those facts before mount.
+
 ### Image composition
 
 - **Verified:** Non-overlapping runtime images can be composed into one
@@ -53,9 +60,10 @@ omitted. Evidence labels are defined in [`README.md`](README.md).
   executable image; a seed outside all images or inside more than one image is
   an input error.
 
-The generic cases are preserved as framework fixtures. Multi-image command-line
-integration is deferred to the framework's future image-set orchestration; see
-the framework migration record.
+**Current integration:** The game manifest builder now deterministically sorts
+multiple runtime images and rejects intra-/cross-image overlap. Framework
+`armrecomp` still emits one image at a time; composition of its per-image
+generation reports remains deferred.
 
 ## ARM/Thumb and control flow
 
@@ -80,9 +88,10 @@ the framework migration record.
   preserve predicate-false fallthrough. A failed predicate must not write LR,
   change PC, or raise an exception.
 
-The canonical framework does not yet have one mode-aware key type across
-discovery, symbols, and dispatch. The same-address/mixed-mode collision vector
-is therefore recorded as deferred rather than claimed as executable coverage.
+**Current integration:** The canonical framework now carries mode-bearing keys
+through discovery, emitted symbols, reachability, and dispatch. Public tests
+execute same-aligned-address ARM/Thumb collisions, conditional A32 exits,
+`BLX LR` capture, and aligned-PC `TBB`/`TBH` behavior.
 
 ## Architectural state and memory
 
@@ -105,9 +114,10 @@ is therefore recorded as deferred rather than claimed as executable coverage.
 - **Verified:** A vector lane store is not a whole-register store. If the
   emitter cannot distinguish the lane form, it must reject it.
 
-The framework directly executes checked-memory, raw-state, flag, and NaN
-vectors. FPSCR mode behavior and unsupported vector forms remain fixtures for
-their named emitter/runtime integration points.
+**Current integration:** The framework directly executes checked-memory,
+raw-state, flag, NaN, FPSCR flush-to-zero, and lane-aware vector regressions.
+Unimplemented operand shapes remain named traps and stay visible in generation
+reports.
 
 ## Exclusive monitor
 
@@ -123,8 +133,10 @@ their named emitter/runtime integration points.
 - **Derived:** The standalone runtime should expose these semantics only when
   its canonical thread/CPU selection and shared-memory ownership are defined.
 
-Exclusive-monitor vectors are intentionally deferred: the current framework
-has no canonical per-thread CPU object or exclusive-monitor API.
+**Current integration:** The standalone runtime now owns thread-local CPU state
+and an exclusive monitor. Public cross-thread tests verify that an overlapping
+ordinary write invalidates another thread's reservation under the shared
+synchronization contract.
 
 ## Strict diagnostics and reproducibility
 

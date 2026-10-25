@@ -5,6 +5,10 @@ standalone framework. It links `vitarecomp` and `vitarecomp::gpu` from the
 pinned submodule. It does not link or launch Vita3K, does not contain a JIT,
 and does not load generated Killzone code.
 
+The accepted gitlink is
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The host self-test and content
+boundary are verified; title boot and playability are not.
+
 ## Modes and options
 
 The only currently successful execution mode is the bounded renderer
@@ -94,3 +98,7 @@ code 9. This is intentional. Title execution cannot become ready until
 generated-source provenance, complete strict import registration, and the
 required title HLE/GXM preconditions are implemented and tested. There is no
 success-shaped title entry point in this scaffold.
+
+The complete production boundary is in
+[`ARCHITECTURE.md`](ARCHITECTURE.md); the gates that may eventually replace
+exit 9 are ordered in [`ROADMAP.md`](ROADMAP.md).

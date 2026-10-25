@@ -10,6 +10,10 @@ Source provenance:
 
 - Vita3K base: `ee50eb8644b4184996047f04406486281586935b`
 - prior branch HEAD: `c505989f8c03dcae922fe93f09b0d30dac21c230`
+- accepted framework integration:
+  `f3408e1ea73b724c7ba3a644633938c220f2cc2a`
+- accepted game verification report:
+  `36fef0e94ab99d1fc6e1903f02a388013eb3585d`
 - snapshot validation: exact current bytes for all 45 changed public
   source/documentation paths, including ten uncommitted paths
 - migration disposition and validation: [`../../MIGRATION.md`](../../MIGRATION.md)
@@ -24,7 +28,9 @@ Source provenance:
 
 Labels describe the evidence in the prior snapshot. They do not imply that the
 same behavior is already integrated into the new framework. Integration status
-is stated separately in each document.
+is stated separately in each document and was reconciled after the accepted
+foundation verification. See the production
+[`architecture`](../ARCHITECTURE.md) for the current boundary.
 
 ## Documents
 

@@ -317,8 +317,11 @@ The verified target heads were green before this report-only commit:
 The framework run covered formatting/static/artifact safety plus Debug and
 Release DX12/Vulkan jobs. The game run covered formatting/static/schema/
 PowerShell/artifact safety plus Debug, RelWithDebInfo, and Release host jobs.
-The report-only follow-up head is required to complete the same hosted workflow
-before handoff.
+The report-only follow-up head subsequently completed the same hosted workflow:
+[game run 40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323)
+passed on report commit
+`36fef0e94ab99d1fc6e1903f02a388013eb3585d`. The hosted-CI handoff gate is
+therefore complete.
 
 ## Original workspaces and preserved handoff
 
