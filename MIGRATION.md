@@ -51,10 +51,10 @@ Framework repository:
 
 ## Foundation-checkpoint reconciliation
 
-The migration is reconciled through framework
-`0e81bb4b275435b2396b01a88c8d767d0104cc8b`, which is also the exact game
-gitlink and `config/framework.commit` value. The accepted game verification
-report is `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
+The migration checkpoint was reconciled at framework
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b`, which was the exact game
+gitlink and `config/framework.commit` value at acceptance. The accepted game
+verification report is `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
 
 | Migrated contract | Final checkpoint disposition |
 |---|---|

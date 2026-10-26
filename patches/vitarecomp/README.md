@@ -8,7 +8,7 @@ are parked here only because the session that wrote them could not push to
 the fork. Once they land there, delete this directory and bump the submodule
 pin and `config/framework.commit` together.
 
-Base: `0e81bb4b275435b2396b01a88c8d767d0104cc8b` (the current pin).
+Base: `0e81bb4b275435b2396b01a88c8d767d0104cc8b` (the patch base).
 
 | Patch | What it fixes |
 |---|---|

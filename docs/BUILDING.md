@@ -41,7 +41,7 @@ git submodule status
 to the same commit. The current pin is:
 
 ```text
-0e81bb4b275435b2396b01a88c8d767d0104cc8b
+a7392ce3d07307db5814a9da9703413d06f87da2
 ```
 
 To reproduce the independently accepted M0 revisions rather than the

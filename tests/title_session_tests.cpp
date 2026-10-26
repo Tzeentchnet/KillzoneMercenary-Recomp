@@ -78,7 +78,10 @@ void write_elf(const std::filesystem::path &path,
                bool function_import = false,
                std::uint32_t tls_memory_size = 0U,
                std::uint32_t tls_alignment = 4096U,
-               bool tls_variable_import = false) {
+               bool tls_variable_import = false,
+               bool data_function_export = false) {
+    if (data_function_export && relocation != RelocationCase::none)
+        throw TestFailure("data export fixture cannot include relocations");
     std::vector<std::uint8_t> bytes(512U, 0U);
     bytes[0] = 0x7FU;
     bytes[1] = 'E';
@@ -96,8 +99,10 @@ void write_elf(const std::filesystem::path &path,
     write_u32(bytes, 28U, 52U);
     write_u16(bytes, 40U, 52U);
     write_u16(bytes, 42U, 32U);
-    write_u16(bytes, 44U,
-              relocation == RelocationCase::none ? 1U : 2U);
+    write_u16(bytes, 44U, static_cast<std::uint16_t>(
+                              1U +
+                              (relocation == RelocationCase::none ? 0U : 1U) +
+                              (data_function_export ? 1U : 0U)));
 
     write_u32(bytes, 52U, 1U);
     write_u32(bytes, 56U, 0U);
@@ -113,7 +118,17 @@ void write_elf(const std::filesystem::path &path,
     write_u32(bytes, 76U, 5U);
     write_u32(bytes, 80U, tls_alignment);
 
-    if (relocation != RelocationCase::none) {
+    if (data_function_export) {
+        constexpr std::size_t header = 84U;
+        write_u32(bytes, header + 0U, 1U);
+        write_u32(bytes, header + 4U, 512U);
+        write_u32(bytes, header + 8U, 0x3000U);
+        write_u32(bytes, header + 12U, 0x3000U);
+        write_u32(bytes, header + 16U, 0U);
+        write_u32(bytes, header + 20U, 16U);
+        write_u32(bytes, header + 24U, 6U);
+        write_u32(bytes, header + 28U, 16U);
+    } else if (relocation != RelocationCase::none) {
         constexpr std::size_t header = 84U;
         constexpr std::size_t stream = 0x180U;
         constexpr std::size_t patch = 0x1C0U;
@@ -153,6 +168,16 @@ void write_elf(const std::filesystem::path &path,
     if (invalid_module_tables) {
         write_u32(bytes, 0x124U, 8U);
         write_u32(bytes, 0x128U, 4U);
+    } else if (data_function_export) {
+        write_u32(bytes, 0x124U, 0x160U);
+        write_u32(bytes, 0x128U, 0x180U);
+        write_u16(bytes, 0x160U, 0x20U);
+        write_u16(bytes, 0x166U, 1U);
+        write_u32(bytes, 0x16CU, UINT32_C(0x11110000));
+        write_u32(bytes, 0x178U, 0x1A0U);
+        write_u32(bytes, 0x17CU, 0x1A4U);
+        write_u32(bytes, 0x1A0U, UINT32_C(0x22220000));
+        write_u32(bytes, 0x1A4U, 0x3001U);
     }
     if (function_import || tls_variable_import) {
         write_u32(bytes, 0x12CU, 0x160U);
@@ -193,13 +218,14 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
                                     bool function_import = false,
                                     std::uint32_t tls_memory_size = 0U,
                                     std::uint32_t tls_alignment = 4096U,
-                                    bool tls_variable_import = false) {
+                                    bool tls_variable_import = false,
+                                    bool data_function_export = false) {
     const std::filesystem::path content = root / L"app0";
     const std::filesystem::path module = content / L"module.elf";
     const std::filesystem::path manifest = root / L"runtime-manifest.json";
     write_elf(module, invalid_module_tables, relocation, module_start,
               elf_type, function_import, tls_memory_size, tls_alignment,
-              tls_variable_import);
+              tls_variable_import, data_function_export);
     const std::string hash =
         kzm::host::sha256_hex(kzm::host::sha256_file(module));
     std::array<char, 11> range_end{};
@@ -215,6 +241,13 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
             8192U, tls_memory_size > 0U
                        ? tls_memory_size + UINT32_C(0x1D0)
                        : 0U);
+    const std::string data_segment =
+        data_function_export
+            ? ", {\"index\": 1, \"fileOffset\": 512, \"fileSize\": 0, "
+              "\"virtualAddress\": \"0x00003000\", \"memorySize\": 16, "
+              "\"rangeEndExclusive\": \"0x00003010\", "
+              "\"flags\": \"rw-\", \"alignment\": 16}"
+            : "";
     const std::string json =
         "{\n"
         "  \"schemaVersion\": 1,\n"
@@ -237,7 +270,9 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
         "\"encodedEntry\": \"0x00000100\", \"segmentIndex\": 0, "
         "\"segmentOffset\": 256, \"virtualAddress\": \"0x00000100\"},\n"
         "    \"programHeaderCount\": " +
-        std::to_string(relocation == RelocationCase::none ? 1U : 2U) +
+        std::to_string(
+            1U + (relocation == RelocationCase::none ? 0U : 1U) +
+            (data_function_export ? 1U : 0U)) +
         ",\n"
         "    \"loadSegments\": [{\"index\": 0, \"fileOffset\": 0, "
         "\"fileSize\": 512, \"virtualAddress\": \"0x00000000\", "
@@ -245,7 +280,7 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
         std::to_string(segment_memory_size) +
         ", \"rangeEndExclusive\": \"" + range_end.data() +
         "\", \"flags\": \"r-x\", \"alignment\": " +
-        std::to_string(tls_alignment) + "}]\n"
+        std::to_string(tls_alignment) + "}" + data_segment + "]\n"
         "  }]\n"
         "}\n";
     write_text(manifest, json);
@@ -416,6 +451,23 @@ void test_completion_and_retained_bytes(const std::filesystem::path &root) {
     check(repeated.outcome == kzm::host::TitleCallOutcome::boundary_error &&
               g_entry_calls == 1U,
           "consumed prepared capability called entry again");
+}
+
+void test_data_address_function_export(const std::filesystem::path &root) {
+    const std::filesystem::path manifest = write_fixture(
+        root, false, RelocationCase::none, 0x1001U, 2U, false, 0U, 4096U,
+        false, true);
+    kzm::host::ValidatedContent content =
+        kzm::host::validate_content_manifest(manifest, root / L"app0");
+    BundleFixture fixture(content, completed_entry);
+    g_entry_calls = 0U;
+    kzm::host::Logger logger = quiet_logger();
+    kzm::host::PreparedTitle prepared =
+        kzm::host::prepare_title(content, fixture.bundle, logger);
+    const kzm::host::TitleCallResult result = std::move(prepared).execute();
+    check(result.outcome == kzm::host::TitleCallOutcome::completed &&
+              g_entry_calls == 1U,
+          "data-address function export blocked title entry");
 }
 
 void test_failed_preconditions(const std::filesystem::path &root) {
@@ -763,6 +815,7 @@ int main() {
         std::filesystem::remove_all(root, ignored);
         std::filesystem::create_directories(root);
         test_completion_and_retained_bytes(root / L"completion");
+        test_data_address_function_export(root / L"data-export");
         test_failed_preconditions(root);
         test_entry_relocation_contract(root / L"entry-contract");
         test_relocation_preflight(root / L"relocations");

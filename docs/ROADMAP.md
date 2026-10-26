@@ -9,7 +9,7 @@ behavior of the real game, not on reports.
 |---|---|---|
 | [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
 | [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
-| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: strict entry path done, first real-bundle run pending |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: first real-bundle run done, relocation normalization blocks entry |
 | [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
 | [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
 | [M5](#m5--first-mission) | Mission 1 playable start to finish | |
@@ -151,10 +151,14 @@ Tasks:
       through `vita_guest_call`. Exit codes: 0 clean return, 11
       preparation failure, 12 first strict failure, 13 exit request
       ([NATIVE_HOST.md](NATIVE_HOST.md)).
-- [ ] **Run it (needs the owner's dump on Windows):** do the first
-      real-bundle entry run and record its outcome in
-      [PROJECT_STATUS.md](PROJECT_STATUS.md#log). Then work run-driven from
-      the first strict failure.
+- [x] **Run it:** the first real-bundle DX12 attempt validated and mounted
+      all three modules, then exited 11 during module preflight with zero
+      entry calls. The aggregate outcome is in
+      [PROJECT_STATUS.md](PROJECT_STATUS.md#log).
+- [ ] **Content pipeline:** normalize dumped relocation records to the
+      ELF-declared identity addresses before manifest generation, verify
+      zero changed/unsupported/out-of-file records, and rerun to reach the
+      first strict title failure.
 - [ ] **Game:** run `module_start` for the other modules in dependency
       order before the entry module, taking the order from the oracle's
       module-load log. Today only the selected entry module is started.

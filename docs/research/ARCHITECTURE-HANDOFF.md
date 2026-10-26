@@ -4,8 +4,8 @@
 
 This record maps useful evidence from the historical Vita3K hybrid into the
 accepted standalone architecture. It is not an active TODO list. Historical
-evidence labels are defined in [`README.md`](README.md); current production
-status is reconciled against framework
+evidence labels are defined in [`README.md`](README.md); this historical
+handoff was reconciled against framework
 `0e81bb4b275435b2396b01a88c8d767d0104cc8b` and game report
 `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
 

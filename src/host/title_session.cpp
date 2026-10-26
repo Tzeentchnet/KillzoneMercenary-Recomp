@@ -128,6 +128,21 @@ resolve_virtual(const ValidatedModule &module, std::uint32_t address,
     throw ParseFailure(status);
 }
 
+bool address_is_executable(const ValidatedModule &module,
+                           std::uint32_t address) noexcept {
+    const std::uint32_t normalized = address & ~UINT32_C(1);
+    for (const ValidatedSegment &segment : module.segments()) {
+        const std::uint64_t end =
+            static_cast<std::uint64_t>(segment.virtual_address) +
+            segment.file_size;
+        if ((segment.flags & 1U) != 0U &&
+            normalized >= segment.virtual_address && normalized < end) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const ValidatedSegment &segment_for_selector(
     const ValidatedModule &module, std::uint32_t encoded,
     vita_loader_status status = VITA_LOADER_ERROR_MODULE_INFO) {
@@ -340,18 +355,25 @@ ParsedPostLink parse_post_link(const ModuleState &state) {
             count == 0U ? ResolvedBytes{0U, 0U}
                         : resolve_virtual(module, address_table, count * 4U);
         for (std::uint32_t index = 0U; index < count; ++index) {
-            vita_binding_export_kind kind = VITA_BINDING_EXPORT_TLS_VARIABLE;
+            vita_binding_export_kind declared_kind =
+                VITA_BINDING_EXPORT_TLS_VARIABLE;
             if (index < function_count) {
-                kind = VITA_BINDING_EXPORT_FUNCTION;
+                declared_kind = VITA_BINDING_EXPORT_FUNCTION;
             } else if (index < static_cast<std::uint32_t>(function_count) +
                                    variable_count) {
-                kind = VITA_BINDING_EXPORT_VARIABLE;
+                declared_kind = VITA_BINDING_EXPORT_VARIABLE;
             }
+            const std::uint32_t address =
+                read_u32(bytes, addresses.file_offset + index * 4U);
+            const vita_binding_export_kind kind =
+                vita_binding_effective_export_kind(
+                    declared_kind,
+                    address_is_executable(module, address) ? 1 : 0);
             parsed.exports.push_back(vita_binding_export_metadata{
                 kind,
                 library_nid,
                 read_u32(bytes, nids.file_offset + index * 4U),
-                read_u32(bytes, addresses.file_offset + index * 4U),
+                address,
             });
         }
         cursor += size;
