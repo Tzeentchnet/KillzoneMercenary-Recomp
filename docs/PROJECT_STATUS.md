@@ -7,17 +7,19 @@ Windows with DX12 and Vulkan at 30 fps or higher ([GOAL.md](GOAL.md)).
 ([ROADMAP.md](ROADMAP.md)). The code path that builds a local generated
 bundle into the host and enters it exists. Its first real-bundle attempt
 now passes relocation preflight and binding, then calls translated title code.
-The measured first stop is a named missing firmware import.
+The selected entry module returned cleanly in three consecutive DX12 WARP
+runs; dependency-ordered supporting-module starts remain open.
 
 | Milestone | State |
 |---|---|
 | M0 Foundation | ✅ Done (2026-10-25) |
 | M1 Lift and link | ▶ Build path done. Trap ranking and symbol map open |
-| M2 Into title code | ▶ Translated entry reached. First missing firmware import named |
+| M2 Into title code | ▶ Selected entry module returns clean. Dependency-ordered starts next |
 | M3–M7 | Not started |
 
-The game does not boot yet. Translated Killzone code has run once through the
-strict native entry boundary.
+The game does not boot yet. Translated Killzone code returns cleanly from the
+selected entry module, but supporting modules have not started and no frame
+loop has been reached.
 
 ## What exists today
 
@@ -25,7 +27,7 @@ strict native entry boundary.
 |---|---|
 | Recompiler (`armrecomp`, framework) | All three post-link runtime images lift and compile with MSVC `/W4 /WX`. Coverage is 96.37% of executable bytes. 99.897% of emitted instructions are translated, with **3,770 explicit traps** left. Output is deterministic across runs |
 | Linking | `armrecomp compose` builds one registry across modules. `KZMRECOMP_GENERATED_SOURCE_DIR` builds a provenance-validated local bundle into the host ([generated-source-provenance.md](generated-source-provenance.md)). Empty by default and in CI |
-| Title entry | The title session loads the module set from retained bytes, binds imports, prepares stack/TLS/CPU, and calls the entry module's `module_start` once through `vita_guest_call`. The preserved real bundle reached entry once and exited 12 at `nid_BE43BB07::nid_BFE02B3A` from `0x818C37A8`. Exit 0 = clean return, 11 = preparation failure, 12 = first strict failure, 13 = exit request; 9 = no bundle ([NATIVE_HOST.md](NATIVE_HOST.md)) |
+| Title entry | The title session loads the module set from retained bytes, binds imports, prepares stack/TLS/CPU, and calls the selected entry module's `module_start` once through `vita_guest_call`. Regenerating the preserved bundle with the pinned public VitaSDK 3.60 NID database resolved the prior raw-NID stop to the existing `SceLibc::__cxa_set_dso_handle_main` HLE; three consecutive DX12 WARP runs returned cleanly with exit 0. Supporting modules are not started yet. Exit 11 = preparation failure, 12 = first strict failure, 13 = exit request; 9 = no bundle ([NATIVE_HOST.md](NATIVE_HOST.md)) |
 | Memory plan | Derived from the validated load ranges: a window of up to 256 MiB with heap, sysmem, kernel, main-stack, and TLS arenas. No GPU-mapped region yet |
 | Runtime/HLE (framework) | Checked memory, ARM/VFP CPU state, baton scheduler, threads and sync, allocators, libc/libm, import registry, I/O/FIOS2 (synchronous), ULT sync subset, VFS/PSARC |
 | GXM / GXP / USSE | Not started (M3). This is the largest single piece of work |
@@ -37,17 +39,14 @@ strict native entry boundary.
 
 ## Known blockers, in order
 
-1. The first translated title call stops at the unimplemented firmware import
-   `nid_BE43BB07::nid_BFE02B3A` from `0x818C37A8`. Implement or identify that
-   import from native-run evidence, then rerun to expose the next boot-path
-   dependency (M2).
+1. Only the selected entry module's `module_start` runs; the supporting
+   modules must start first in dependency order before the native run can
+   expose the next boot-path dependency (M2).
 2. The trap census has not been ranked by boot-path reachability, and
    there is no symbol map for naming failures (M1).
-3. Only the entry module's `module_start` runs; the other modules are not
-   started first (M2).
-4. Guest `sceGxm`, `sceDisplay`, and the GXP/USSE shader translator are
+3. Guest `sceGxm`, `sceDisplay`, and the GXP/USSE shader translator are
    missing (M3).
-5. The framework's Windows quality gate fails on any C/C++ change, and the
+4. The framework's Windows quality gate fails on any C/C++ change, and the
    framework does not build on Linux. Fixes are parked in
    [`patches/vitarecomp`](../patches/vitarecomp/README.md) until someone with
    push access lands them in the fork.
@@ -97,6 +96,11 @@ failure. All inputs were public or synthetic.
 Add one short entry per meaningful step: what now works, and the measured
 number if there is one. Do not write separate verification reports.
 
+- **2026-10-26:** Regenerated the preserved three-module bundle with the pinned
+  public VitaSDK 3.60 NID database. The prior raw-NID stop resolved to the
+  existing `SceLibc::__cxa_set_dso_handle_main` HLE, and three consecutive
+  DX12 WARP title runs returned 0 after one selected entry call. No frame loop
+  is claimed; dependency-ordered supporting-module starts are next.
 - **2026-10-26:** The preserved three-module DX12 bundle completed relocation
   preflight and strict binding, prepared the main stack, called translated
   title entry once, and exited 12 at `nid_BE43BB07::nid_BFE02B3A` from

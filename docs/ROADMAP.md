@@ -9,7 +9,7 @@ behavior of the real game, not on reports.
 |---|---|---|
 | [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
 | [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
-| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: translated entry reached; first missing firmware import named |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: selected entry module returns clean; dependency-ordered module starts next |
 | [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
 | [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
 | [M5](#m5--first-mission) | Mission 1 playable start to finish | |
@@ -163,6 +163,11 @@ Tasks:
 - [x] **Run it:** the preserved three-module bundle bound, prepared the main
       stack, called translated title entry once, and exited 12 at the named
       strict import `nid_BE43BB07::nid_BFE02B3A` from `0x818C37A8`.
+- [x] **Run it:** regenerate the preserved bundle with the pinned public
+      VitaSDK 3.60 NID database. The import resolved to the existing
+      `SceLibc::__cxa_set_dso_handle_main` HLE, and three consecutive DX12 WARP
+      runs called the selected entry module and returned cleanly with exit 0.
+      Supporting modules are not started yet, so no frame loop is claimed.
 - [ ] **Game:** run `module_start` for the other modules in dependency
       order before the entry module, deriving the order from retained module
       metadata and native-run dependencies. Today only the selected entry
