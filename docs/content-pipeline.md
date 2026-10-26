@@ -90,6 +90,7 @@ capability without installing or launching the title:
 ```powershell
 $privateRoot = '<absolute-ignored-private-data-root>'
 $vita3k = Join-Path $privateRoot 'vita3k\Vita3K.exe'
+$armrecomp = '<absolute-path-to-pinned-armrecomp.exe>'
 $revision = '<40-character-vita3k-git-commit>'
 
 pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
@@ -97,6 +98,7 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Vita3KExecutable $vita3k `
   -Vita3KSourceRevision $revision `
   -PrivateDataRoot $privateRoot `
+  -ArmrecompExecutable $armrecomp `
   -Phase All `
   -DryRun `
   -Redact
@@ -111,6 +113,7 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Vita3KExecutable $vita3k `
   -Vita3KSourceRevision $revision `
   -PrivateDataRoot $privateRoot `
+  -ArmrecompExecutable $armrecomp `
   -Phase Install
 
 pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
@@ -118,6 +121,7 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Vita3KExecutable $vita3k `
   -Vita3KSourceRevision $revision `
   -PrivateDataRoot $privateRoot `
+  -ArmrecompExecutable $armrecomp `
   -Phase Dump
 ```
 
@@ -132,11 +136,24 @@ post-run checks or overlap a new image set. The dump phase fails if no
 post-link ELF is produced. `-Phase All` performs the same install,
 verification, and dump sequence in one invocation.
 
-## 4. Validate runtime images
+## 4. Normalize and validate runtime images
 
 After a successful dump, the wrapper calls
-`New-KillzoneElfManifest.ps1`. The validator is deliberately independent of
-Vita3K. For every recursively discovered `.elf`, it checks:
+`Normalize-KillzoneRuntimeImages.ps1` with the pinned `armrecomp`. Raw Vita3K
+dumps remain unchanged. Normalized runtime images are written under the
+separate ignored `runtime-images` root before
+`New-KillzoneElfManifest.ps1` reads them.
+
+The normalizer strictly decodes every `PT_SCE_RELA` record. Relocations that
+overlap validated variable-import patch sites are already post-link bindings,
+so their bytes are preserved and reported as `preservedPostLinkRecords`;
+normalizing them as identity relocations would erase the selected variable
+targets. All other supported relocations are materialized at identity load
+addresses. Unsupported, malformed, out-of-file, or invalid-segment records
+fail without publishing a partial output.
+
+The manifest validator is deliberately independent of Vita3K. For every
+recursively discovered normalized `.elf`, it checks:
 
 - ELF magic, ELF32 class, little-endian encoding, and ARM machine type;
 - bounded ELF and program headers;
@@ -188,13 +205,24 @@ audio, or UI access.
 
 ### Independent existing-dump validation
 
-A previously captured private post-link image set can be checked without
-launching Vita3K:
+A previously captured private post-link image set can be normalized and
+checked without launching Vita3K:
 
 ```powershell
+$privateRoot = '<absolute-ignored-private-data-root>'
+$rawRoot = '<private-raw-post-link-elf-directory>'
+$runtimeRoot = '<empty-private-normalized-elf-directory>'
+$armrecomp = '<absolute-path-to-pinned-armrecomp.exe>'
+
+pwsh -NoProfile -File tools/content/Normalize-KillzoneRuntimeImages.ps1 `
+  -PrivateDataRoot $privateRoot `
+  -DumpRoot $rawRoot `
+  -NormalizedRoot $runtimeRoot `
+  -ArmrecompExecutable $armrecomp
+
 pwsh -NoProfile -File tools/content/New-KillzoneElfManifest.ps1 `
-  -PrivateDataRoot '<absolute-ignored-private-data-root>' `
-  -DumpRoot '<private-post-link-elf-directory>' `
+  -PrivateDataRoot $privateRoot `
+  -DumpRoot $runtimeRoot `
   -ManifestPath '<private-manifest-path>' `
   -SourceArchivePath '<absolute-path-to-lawfully-obtained-archive>' `
   -SourceArchiveSha256 '<64-character-sha256>' `

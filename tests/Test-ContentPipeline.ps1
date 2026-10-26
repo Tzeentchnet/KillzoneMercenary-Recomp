@@ -16,6 +16,9 @@ $wrapper = Join-Path `
 $manifestBuilder = Join-Path `
     $repositoryRoot `
     'tools\content\New-KillzoneElfManifest.ps1'
+$normalizer = Join-Path `
+    $repositoryRoot `
+    'tools\content\Normalize-KillzoneRuntimeImages.ps1'
 $testParent = Join-Path $repositoryRoot 'private-data\content-tests'
 $workRoot = Join-Path $testParent ([Guid]::NewGuid().ToString('N'))
 $script:caseCount = 0
@@ -310,6 +313,25 @@ try {
         $fakeBody + "`r`n",
         [Text.Encoding]::ASCII
     )
+    $fakeNormalizer = Join-Path $workRoot 'fake-armrecomp.cmd'
+    $normalizerBody = @(
+        '@echo off'
+        'if not "%~1"=="normalize" exit /b 9'
+        'copy /b "%~2" "%~3" >nul'
+        'if errorlevel 1 exit /b 8'
+        'echo %~2^|%~3>>"%~dp0normalize-calls.txt"'
+        'echo normalized 0 relocations across 0 streams'
+        'echo   changed       0'
+        'echo   preserved     0'
+        'echo   unsupported   0'
+        'echo   outside file  0'
+        'exit /b 0'
+    ) -join "`r`n"
+    [IO.File]::WriteAllText(
+        $fakeNormalizer,
+        $normalizerBody + "`r`n",
+        [Text.Encoding]::ASCII
+    )
 
     Invoke-TestCase 'Vita3K dry run' {
         $json = & $wrapper `
@@ -317,16 +339,28 @@ try {
             -Vita3KExecutable $fakeVita3K `
             -Vita3KSourceRevision ('a' * 40) `
             -PrivateDataRoot $workRoot `
+            -ArmrecompExecutable $fakeNormalizer `
             -Phase All `
             -DryRun `
             -Redact
         $report = $json | ConvertFrom-Json
         Assert-True $report.dryRun 'Wrapper did not report dry-run mode.'
-        Assert-Equal 2 $report.commands.Count 'Expected install and dump plans.'
+        Assert-Equal `
+            3 `
+            $report.commands.Count `
+            'Expected install, dump, and normalize plans.'
         Assert-Equal `
             '<private-data-root>' `
             $report.privateDataRoot `
             'Dry-run redaction failed.'
+        Assert-Equal `
+            '<private-raw-elf-root>' `
+            $report.expectedRawDumpRoot `
+            'Raw dump root redaction failed.'
+        Assert-Equal `
+            '<private-normalized-elf-root>' `
+            $report.expectedRuntimeImageRoot `
+            'Normalized root redaction failed.'
         Assert-True `
             (-not (Test-Path -LiteralPath (
                 Join-Path $workRoot 'unexpected-execution.txt'
@@ -355,6 +389,7 @@ try {
                 -Vita3KExecutable $noCapability `
                 -Vita3KSourceRevision ('b' * 40) `
                 -PrivateDataRoot $workRoot `
+                -ArmrecompExecutable $fakeNormalizer `
                 -DryRun
         } 'dump capability is unavailable'
     }
@@ -362,6 +397,119 @@ try {
     $archiveHash = (
         Get-FileHash -LiteralPath $unicodeArchive -Algorithm SHA256
     ).Hash
+
+    Invoke-TestCase 'deterministic relocation normalization' {
+        $rawRoot = Join-Path $workRoot 'raw-normalization'
+        New-SyntheticElf `
+            -Path (Join-Path $rawRoot 'zeta.elf') `
+            -VirtualAddress 2181038080
+        New-SyntheticElf `
+            -Path (Join-Path $rawRoot 'nested\alpha.elf') `
+            -VirtualAddress 2164260864
+        $rawAlpha = Join-Path $rawRoot 'nested\alpha.elf'
+        $rawZeta = Join-Path $rawRoot 'zeta.elf'
+        $alphaHash = (
+            Get-FileHash -LiteralPath $rawAlpha -Algorithm SHA256
+        ).Hash
+        $zetaHash = (
+            Get-FileHash -LiteralPath $rawZeta -Algorithm SHA256
+        ).Hash
+        $normalizedRoot = Join-Path $workRoot 'normalized-runtime'
+
+        $json = & $normalizer `
+            -PrivateDataRoot $workRoot `
+            -DumpRoot $rawRoot `
+            -NormalizedRoot $normalizedRoot `
+            -ArmrecompExecutable $fakeNormalizer
+        $report = $json | ConvertFrom-Json
+        Assert-Equal 2 $report.moduleCount 'Expected two normalized ELFs.'
+        Assert-Equal `
+            0 `
+            $report.preservedPostLinkRecords `
+            'Unexpected preserved post-link relocation count.'
+        Assert-Equal `
+            'nested/alpha.elf' `
+            $report.modules[0].path `
+            'Normalization order was not ordinal.'
+        Assert-Equal `
+            'zeta.elf' `
+            $report.modules[1].path `
+            'Normalization order was not ordinal.'
+        Assert-Equal `
+            $alphaHash `
+            (Get-FileHash -LiteralPath $rawAlpha -Algorithm SHA256).Hash `
+            'Normalizer changed the first raw ELF.'
+        Assert-Equal `
+            $zetaHash `
+            (Get-FileHash -LiteralPath $rawZeta -Algorithm SHA256).Hash `
+            'Normalizer changed the second raw ELF.'
+        Assert-True `
+            (Test-Path -LiteralPath (
+                Join-Path $normalizedRoot 'nested\alpha.elf'
+            ) -PathType Leaf) `
+            'Normalized nested ELF was not created.'
+
+        $normalizedZeta = Join-Path $normalizedRoot 'zeta.elf'
+        $normalizedBytes = [IO.File]::ReadAllBytes($normalizedZeta)
+        $normalizedBytes[$normalizedBytes.Length - 1] = 0x7f
+        [IO.File]::WriteAllBytes($normalizedZeta, $normalizedBytes)
+        $normalizedManifest = Join-Path `
+            $workRoot `
+            'manifests\normalized.json'
+        & $manifestBuilder `
+            -PrivateDataRoot $workRoot `
+            -DumpRoot $normalizedRoot `
+            -ManifestPath $normalizedManifest `
+            -SourceArchivePath $unicodeArchive `
+            -SourceArchiveSha256 $archiveHash `
+            -Vita3KSourceRevision ('f' * 40) |
+            Out-Null
+        $manifest = (
+            [IO.File]::ReadAllText($normalizedManifest) |
+                ConvertFrom-Json
+        )
+        Assert-Equal `
+            (Get-FileHash `
+                -LiteralPath $normalizedZeta `
+                -Algorithm SHA256).Hash.ToLowerInvariant() `
+            $manifest.modules[1].sha256 `
+            'Manifest did not hash the normalized ELF.'
+        Assert-True `
+            ($manifest.modules[1].sha256 -cne $zetaHash.ToLowerInvariant()) `
+            'Manifest unexpectedly hashed the raw ELF.'
+
+        Assert-ThrowsLike {
+            & $normalizer `
+                -PrivateDataRoot $workRoot `
+                -DumpRoot $rawRoot `
+                -NormalizedRoot $normalizedRoot `
+                -ArmrecompExecutable $fakeNormalizer
+        } 'must not already exist'
+    }
+
+    Invoke-TestCase 'normalization failure cleanup' {
+        $rawRoot = Join-Path $workRoot 'raw-normalization-failure'
+        New-SyntheticElf `
+            -Path (Join-Path $rawRoot 'failure.elf') `
+            -VirtualAddress 2164260864
+        $failingNormalizer = Join-Path $workRoot 'failing-armrecomp.cmd'
+        [IO.File]::WriteAllText(
+            $failingNormalizer,
+            "@echo off`r`necho synthetic failure 1>&2`r`nexit /b 7`r`n",
+            [Text.Encoding]::ASCII
+        )
+        $failedRoot = Join-Path $workRoot 'normalized-failure'
+        Assert-ThrowsLike {
+            & $normalizer `
+                -PrivateDataRoot $workRoot `
+                -DumpRoot $rawRoot `
+                -NormalizedRoot $failedRoot `
+                -ArmrecompExecutable $failingNormalizer
+        } 'Normalization failed'
+        Assert-True `
+            (-not (Test-Path -LiteralPath $failedRoot)) `
+            'Failed normalization left a partial output root.'
+    }
 
     Invoke-TestCase 'invalid ELF' {
         $invalidRoot = Join-Path $workRoot 'dumps-invalid'

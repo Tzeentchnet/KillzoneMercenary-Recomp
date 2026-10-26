@@ -15,6 +15,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $PrivateDataRoot,
 
+    [string] $ArmrecompExecutable,
+
     [ValidateSet('All', 'Install', 'Dump')]
     [string] $Phase = 'All',
 
@@ -29,6 +31,9 @@ $ErrorActionPreference = 'Stop'
 $titleId = 'PCSA00107'
 $inspector = Join-Path $PSScriptRoot 'Inspect-KillzoneDump.ps1'
 $manifestBuilder = Join-Path $PSScriptRoot 'New-KillzoneElfManifest.ps1'
+$normalizer = Join-Path `
+    $PSScriptRoot `
+    'Normalize-KillzoneRuntimeImages.ps1'
 
 function Test-PathWithinRoot {
     param(
@@ -342,6 +347,16 @@ function Get-ReportedPath {
 $archive = [IO.Path]::GetFullPath($ArchivePath)
 $vita3k = [IO.Path]::GetFullPath($Vita3KExecutable)
 $privateRoot = [IO.Path]::GetFullPath($PrivateDataRoot)
+$armrecomp = $null
+if ($Phase -in @('All', 'Dump')) {
+    if ([string]::IsNullOrWhiteSpace($ArmrecompExecutable)) {
+        throw 'Dump and All phases require -ArmrecompExecutable.'
+    }
+    $armrecomp = [IO.Path]::GetFullPath($ArmrecompExecutable)
+    if (-not (Test-Path -LiteralPath $armrecomp -PathType Leaf)) {
+        throw "armrecomp executable does not exist: '$armrecomp'."
+    }
+}
 
 if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
     throw "Archive does not exist: '$archive'."
@@ -433,9 +448,19 @@ if ($Phase -in @('All', 'Dump')) {
         executable = Get-ReportedPath $vita3k '<private-vita3k-executable>'
         arguments = @($dumpArguments)
     })
+    $plannedCommands.Add([ordered]@{
+        phase = 'normalize'
+        executable = Get-ReportedPath $armrecomp '<armrecomp-executable>'
+        arguments = @(
+            'normalize'
+            '<private-raw-runtime-image>'
+            '<private-normalized-runtime-image>'
+        )
+    })
 }
 
 $dumpRoot = Join-Path $portableRoot "elfdumps\$titleId"
+$normalizedRoot = Join-Path $privateRoot "runtime-images\$titleId"
 $manifestPath = Join-Path `
     $privateRoot `
     "manifests\$titleId.runtime-images.json"
@@ -453,9 +478,12 @@ if ($DryRun) {
         portableDataRoot = Get-ReportedPath `
             $portableRoot `
             '<private-portable-data-root>'
-        expectedDumpRoot = Get-ReportedPath `
+        expectedRawDumpRoot = Get-ReportedPath `
             $dumpRoot `
-            '<private-elf-dump-root>'
+            '<private-raw-elf-root>'
+        expectedRuntimeImageRoot = Get-ReportedPath `
+            $normalizedRoot `
+            '<private-normalized-elf-root>'
         expectedManifest = Get-ReportedPath `
             $manifestPath `
             '<private-manifest-path>'
@@ -515,9 +543,16 @@ if ($Phase -in @('All', 'Dump')) {
     $archiveHash = (
         Get-FileHash -LiteralPath $archive -Algorithm SHA256
     ).Hash.ToLowerInvariant()
-    $writtenManifest = & $manifestBuilder `
+    $normalizationJson = & $normalizer `
         -PrivateDataRoot $privateRoot `
         -DumpRoot $dumpRoot `
+        -NormalizedRoot $normalizedRoot `
+        -ArmrecompExecutable $armrecomp `
+        -Redact:$Redact
+    $normalization = $normalizationJson | ConvertFrom-Json
+    $writtenManifest = & $manifestBuilder `
+        -PrivateDataRoot $privateRoot `
+        -DumpRoot $normalizedRoot `
         -ManifestPath $manifestPath `
         -SourceArchivePath $archive `
         -SourceArchiveSha256 $archiveHash `
@@ -525,6 +560,7 @@ if ($Phase -in @('All', 'Dump')) {
         -TitleId $titleId
 } else {
     $writtenManifest = $null
+    $normalization = $null
 }
 
 $result = [ordered]@{
@@ -533,7 +569,13 @@ $result = [ordered]@{
     titleId = $titleId
     phase = $Phase.ToLowerInvariant()
     installed = $installedState
-    dumpRoot = if ($null -ne $writtenManifest) { $dumpRoot } else { $null }
+    rawDumpRoot = if ($null -ne $writtenManifest) { $dumpRoot } else { $null }
+    dumpRoot = if ($null -ne $writtenManifest) {
+        $normalizedRoot
+    } else {
+        $null
+    }
+    normalization = $normalization
     manifest = $writtenManifest
 }
 $resultJson = $result | ConvertTo-Json -Depth 10

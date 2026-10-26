@@ -79,8 +79,11 @@ void write_elf(const std::filesystem::path &path,
                std::uint32_t tls_memory_size = 0U,
                std::uint32_t tls_alignment = 4096U,
                bool tls_variable_import = false,
-               bool data_function_export = false) {
-    if (data_function_export && relocation != RelocationCase::none)
+               bool data_function_export = false,
+               bool zero_site_variable_import = false,
+               bool segmented_variable_import = false) {
+    if ((data_function_export || segmented_variable_import) &&
+        relocation != RelocationCase::none)
         throw TestFailure("data export fixture cannot include relocations");
     std::vector<std::uint8_t> bytes(512U, 0U);
     bytes[0] = 0x7FU;
@@ -90,7 +93,7 @@ void write_elf(const std::filesystem::path &path,
     bytes[4] = 1U;
     bytes[5] = 1U;
     bytes[6] = 1U;
-    if (relocation != RelocationCase::none)
+    if (relocation != RelocationCase::none || segmented_variable_import)
         elf_type = UINT16_C(0xFE04);
     write_u16(bytes, 16U, elf_type);
     write_u16(bytes, 18U, 40U);
@@ -102,13 +105,14 @@ void write_elf(const std::filesystem::path &path,
     write_u16(bytes, 44U, static_cast<std::uint16_t>(
                               1U +
                               (relocation == RelocationCase::none ? 0U : 1U) +
-                              (data_function_export ? 1U : 0U)));
+                              (data_function_export ? 1U : 0U) +
+                              (segmented_variable_import ? 2U : 0U)));
 
     write_u32(bytes, 52U, 1U);
     write_u32(bytes, 56U, 0U);
     write_u32(bytes, 60U, 0U);
     write_u32(bytes, 64U, 0U);
-    write_u32(bytes, 68U, 512U);
+    write_u32(bytes, 68U, segmented_variable_import ? 448U : 512U);
     const std::uint32_t segment_memory_size =
         std::max<std::uint32_t>(
             8192U, tls_memory_size > 0U
@@ -118,7 +122,26 @@ void write_elf(const std::filesystem::path &path,
     write_u32(bytes, 76U, 5U);
     write_u32(bytes, 80U, tls_alignment);
 
-    if (data_function_export) {
+    if (segmented_variable_import) {
+        constexpr std::size_t data_header = 84U;
+        constexpr std::size_t relocation_header = 116U;
+        write_u32(bytes, data_header + 0U, 1U);
+        write_u32(bytes, data_header + 4U, 448U);
+        write_u32(bytes, data_header + 8U, 0x3000U);
+        write_u32(bytes, data_header + 12U, 0x3000U);
+        write_u32(bytes, data_header + 16U, 4U);
+        write_u32(bytes, data_header + 20U, 16U);
+        write_u32(bytes, data_header + 24U, 6U);
+        write_u32(bytes, data_header + 28U, 16U);
+        write_u32(bytes, relocation_header + 0U, UINT32_C(0x60000000));
+        write_u32(bytes, relocation_header + 4U, 0x1B0U);
+        write_u32(bytes, relocation_header + 16U, 12U);
+        write_u32(bytes, 0x1B0U,
+                  (UINT32_C(0xF) << 4U) | (2U << 8U) | (1U << 16U));
+        write_u32(bytes, 0x1B4U, UINT32_C(0x12345678));
+        write_u32(bytes, 0x1B8U, 0U);
+        write_u32(bytes, 0x1C0U, 0x4000U + 0xABCDU);
+    } else if (data_function_export) {
         constexpr std::size_t header = 84U;
         write_u32(bytes, header + 0U, 1U);
         write_u32(bytes, header + 4U, 512U);
@@ -179,17 +202,33 @@ void write_elf(const std::filesystem::path &path,
         write_u32(bytes, 0x1A0U, UINT32_C(0x22220000));
         write_u32(bytes, 0x1A4U, 0x3001U);
     }
-    if (function_import || tls_variable_import) {
+    if (function_import || tls_variable_import ||
+        zero_site_variable_import || segmented_variable_import) {
         write_u32(bytes, 0x12CU, 0x160U);
         write_u32(bytes, 0x130U, 0x184U);
         write_u16(bytes, 0x160U, 0x24U);
         write_u16(bytes, 0x166U, function_import ? 1U : 0U);
+        write_u16(bytes, 0x168U,
+                  (zero_site_variable_import ||
+                   segmented_variable_import) ? 1U : 0U);
         write_u16(bytes, 0x16AU, tls_variable_import ? 1U : 0U);
         write_u32(bytes, 0x16CU, UINT32_C(0x11110000));
         write_u32(bytes, 0x174U, 0x190U);
         write_u32(bytes, 0x178U, 0x194U);
+        write_u32(bytes, 0x17CU, 0x198U);
+        write_u32(bytes, 0x180U, 0x19CU);
         write_u32(bytes, 0x190U, UINT32_C(0x11110001));
         write_u32(bytes, 0x194U, UINT32_C(0xF0000002));
+        write_u32(bytes, 0x198U, UINT32_C(0x11110002));
+        write_u32(bytes, 0x19CU, 0x1A0U);
+        write_u32(bytes, 0x1A0U,
+                  segmented_variable_import ? (12U << 4U) : 0x40U);
+        if (segmented_variable_import) {
+            write_u32(bytes, 0x1A4U,
+                      1U | (1U << 4U) | (2U << 8U) |
+                          (0xABCDU << 16U));
+            write_u32(bytes, 0x1A8U, 0U);
+        }
     }
     if (tls_memory_size != 0U) {
         write_u32(bytes, 0x138U, 0x1D0U);
@@ -219,13 +258,17 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
                                     std::uint32_t tls_memory_size = 0U,
                                     std::uint32_t tls_alignment = 4096U,
                                     bool tls_variable_import = false,
-                                    bool data_function_export = false) {
+                                    bool data_function_export = false,
+                                    bool reverse_manifest_segments = false,
+                                    bool zero_site_variable_import = false,
+                                    bool segmented_variable_import = false) {
     const std::filesystem::path content = root / L"app0";
     const std::filesystem::path module = content / L"module.elf";
     const std::filesystem::path manifest = root / L"runtime-manifest.json";
     write_elf(module, invalid_module_tables, relocation, module_start,
               elf_type, function_import, tls_memory_size, tls_alignment,
-              tls_variable_import, data_function_export);
+              tls_variable_import, data_function_export,
+              zero_site_variable_import, segmented_variable_import);
     const std::string hash =
         kzm::host::sha256_hex(kzm::host::sha256_file(module));
     std::array<char, 11> range_end{};
@@ -241,13 +284,28 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
             8192U, tls_memory_size > 0U
                        ? tls_memory_size + UINT32_C(0x1D0)
                        : 0U);
+    const std::string primary_segment =
+        "{\"index\": 0, \"fileOffset\": 0, \"fileSize\": " +
+        std::to_string(segmented_variable_import ? 448U : 512U) + ", "
+        "\"virtualAddress\": \"0x00000000\", \"memorySize\": " +
+        std::to_string(segment_memory_size) +
+        ", \"rangeEndExclusive\": \"" + range_end.data() +
+        "\", \"flags\": \"r-x\", \"alignment\": " +
+        std::to_string(tls_alignment) + "}";
     const std::string data_segment =
-        data_function_export
-            ? ", {\"index\": 1, \"fileOffset\": 512, \"fileSize\": 0, "
-              "\"virtualAddress\": \"0x00003000\", \"memorySize\": 16, "
-              "\"rangeEndExclusive\": \"0x00003010\", "
-              "\"flags\": \"rw-\", \"alignment\": 16}"
-            : "";
+        "{\"index\": 1, \"fileOffset\": " +
+        std::to_string(segmented_variable_import ? 448U : 512U) +
+        ", \"fileSize\": " +
+        std::to_string(segmented_variable_import ? 4U : 0U) + ", "
+        "\"virtualAddress\": \"0x00003000\", \"memorySize\": 16, "
+        "\"rangeEndExclusive\": \"0x00003010\", "
+        "\"flags\": \"rw-\", \"alignment\": 16}";
+    const std::string load_segments =
+        (data_function_export || segmented_variable_import)
+            ? (reverse_manifest_segments
+                   ? data_segment + ", " + primary_segment
+                   : primary_segment + ", " + data_segment)
+            : primary_segment;
     const std::string json =
         "{\n"
         "  \"schemaVersion\": 1,\n"
@@ -272,15 +330,10 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
         "    \"programHeaderCount\": " +
         std::to_string(
             1U + (relocation == RelocationCase::none ? 0U : 1U) +
-            (data_function_export ? 1U : 0U)) +
+            (data_function_export ? 1U : 0U) +
+            (segmented_variable_import ? 2U : 0U)) +
         ",\n"
-        "    \"loadSegments\": [{\"index\": 0, \"fileOffset\": 0, "
-        "\"fileSize\": 512, \"virtualAddress\": \"0x00000000\", "
-        "\"memorySize\": " +
-        std::to_string(segment_memory_size) +
-        ", \"rangeEndExclusive\": \"" + range_end.data() +
-        "\", \"flags\": \"r-x\", \"alignment\": " +
-        std::to_string(tls_alignment) + "}" + data_segment + "]\n"
+        "    \"loadSegments\": [" + load_segments + "]\n"
         "  }]\n"
         "}\n";
     write_text(manifest, json);
@@ -323,6 +376,9 @@ struct BundleFixture {
     vita_dispatch_entry dispatch[3]{};
     vita_fn_import function_imports[2]{};
     vita_fn import_slots[2]{};
+    vita_var_import variable_imports[1]{};
+    vita_var_site variable_sites[1]{};
+    std::uint32_t variable_storage = 0U;
     vita_generated_module_descriptor descriptor{};
     const vita_generated_module_descriptor *modules[1]{};
     vita_generated_tls_layout_entry tls_entries[1]{};
@@ -406,6 +462,33 @@ struct BundleFixture {
         descriptor.function_import_count = 1U;
         bundle.dispatch_count = 2U;
     }
+
+    void add_zero_site_variable_import() {
+        variable_imports[0] = vita_var_import{
+            UINT32_C(0x11110000),
+            UINT32_C(0x11110002),
+            "FixtureVariable::unused",
+            &variable_storage,
+            nullptr,
+            0U,
+        };
+        descriptor.variable_imports = variable_imports;
+        descriptor.variable_import_count = 1U;
+    }
+
+    void add_segmented_variable_import() {
+        variable_sites[0] = vita_var_site{0x3000U, 0xABCDU};
+        variable_imports[0] = vita_var_import{
+            UINT32_C(0x11110000),
+            UINT32_C(0x11110002),
+            "FixtureVariable::segmented",
+            &variable_storage,
+            variable_sites,
+            1U,
+        };
+        descriptor.variable_imports = variable_imports;
+        descriptor.variable_import_count = 1U;
+    }
 };
 
 kzm::host::Logger quiet_logger() {
@@ -468,6 +551,52 @@ void test_data_address_function_export(const std::filesystem::path &root) {
     check(result.outcome == kzm::host::TitleCallOutcome::completed &&
               g_entry_calls == 1U,
           "data-address function export blocked title entry");
+}
+
+void test_manifest_segment_order(const std::filesystem::path &root) {
+    const std::filesystem::path manifest = write_fixture(
+        root, false, RelocationCase::none, 0x1001U, 2U, false, 0U, 4096U,
+        false, true, true);
+    kzm::host::ValidatedContent content =
+        kzm::host::validate_content_manifest(manifest, root / L"app0");
+    check(content.modules()[0].segments()[0].program_header_index == 1U,
+          "segment-order fixture was not reversed");
+
+    BundleFixture fixture(content, completed_entry);
+    g_entry_calls = 0U;
+    kzm::host::Logger logger = quiet_logger();
+    kzm::host::PreparedTitle prepared =
+        kzm::host::prepare_title(content, fixture.bundle, logger);
+    const kzm::host::TitleCallResult result = std::move(prepared).execute();
+    check(result.outcome == kzm::host::TitleCallOutcome::completed &&
+              g_entry_calls == 1U,
+          "manifest segment order blocked title entry");
+}
+
+void test_zero_site_variable_import(const std::filesystem::path &root) {
+    const std::filesystem::path manifest = write_fixture(
+        root, false, RelocationCase::none, 0x1001U, 2U, false, 0U, 4096U,
+        false, false, false, true);
+    kzm::host::ValidatedContent content =
+        kzm::host::validate_content_manifest(manifest, root / L"app0");
+    BundleFixture fixture(content, completed_entry);
+    fixture.add_zero_site_variable_import();
+    g_entry_calls = 0U;
+    expect_preparation_failure(
+        content, fixture.bundle, kzm::host::TitlePreparationStage::binding);
+}
+
+void test_segmented_variable_import(const std::filesystem::path &root) {
+    const std::filesystem::path manifest = write_fixture(
+        root, false, RelocationCase::none, 0x1001U, 2U, false, 0U, 4096U,
+        false, false, false, false, true);
+    kzm::host::ValidatedContent content =
+        kzm::host::validate_content_manifest(manifest, root / L"app0");
+    BundleFixture fixture(content, completed_entry);
+    fixture.add_segmented_variable_import();
+    g_entry_calls = 0U;
+    expect_preparation_failure(
+        content, fixture.bundle, kzm::host::TitlePreparationStage::binding);
 }
 
 void test_failed_preconditions(const std::filesystem::path &root) {
@@ -816,6 +945,9 @@ int main() {
         std::filesystem::create_directories(root);
         test_completion_and_retained_bytes(root / L"completion");
         test_data_address_function_export(root / L"data-export");
+        test_manifest_segment_order(root / L"segment-order");
+        test_zero_site_variable_import(root / L"zero-site-variable");
+        test_segmented_variable_import(root / L"segmented-variable");
         test_failed_preconditions(root);
         test_entry_relocation_contract(root / L"entry-contract");
         test_relocation_preflight(root / L"relocations");

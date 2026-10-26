@@ -143,10 +143,9 @@ bool address_is_executable(const ValidatedModule &module,
     return false;
 }
 
-const ValidatedSegment &segment_for_selector(
-    const ValidatedModule &module, std::uint32_t encoded,
+const ValidatedSegment &segment_for_program_header(
+    const ValidatedModule &module, std::uint32_t selector,
     vita_loader_status status = VITA_LOADER_ERROR_MODULE_INFO) {
-    const std::uint32_t selector = encoded >> 30U;
     const auto found =
         std::find_if(module.segments().begin(), module.segments().end(),
                      [selector](const ValidatedSegment &segment) {
@@ -156,6 +155,12 @@ const ValidatedSegment &segment_for_selector(
         throw ParseFailure(status);
     }
     return *found;
+}
+
+const ValidatedSegment &segment_for_selector(
+    const ValidatedModule &module, std::uint32_t encoded,
+    vita_loader_status status = VITA_LOADER_ERROR_MODULE_INFO) {
+    return segment_for_program_header(module, encoded >> 30U, status);
 }
 
 std::uint32_t
@@ -207,10 +212,22 @@ struct ParsedPostLink {
     std::vector<vita_binding_function_import_metadata> function_imports;
     std::vector<std::vector<vita_var_site>> variable_sites;
     std::vector<vita_binding_variable_import_metadata> variable_imports;
+    std::vector<std::uint32_t> variable_patch_addresses;
     std::uint32_t module_start = UINT32_MAX;
     std::uint32_t tls_start = 0U;
     std::uint32_t tls_file_size = 0U;
     std::uint32_t tls_memory_size = 0U;
+};
+
+struct VariableRelocationTable {
+    vita_var_reloc_table value{};
+
+    VariableRelocationTable() = default;
+    ~VariableRelocationTable() { vita_var_reloc_free(&value); }
+
+    VariableRelocationTable(const VariableRelocationTable &) = delete;
+    VariableRelocationTable &
+    operator=(const VariableRelocationTable &) = delete;
 };
 
 struct ModuleState {
@@ -271,12 +288,18 @@ void add_target_candidate(std::optional<std::uint32_t> &target,
     target = candidate;
 }
 
-void validate_identity_relocations(const ValidatedModule &module) {
+void validate_identity_relocations(
+    const ValidatedModule &module,
+    const std::vector<std::uint32_t> &post_link_patches) {
     vita_reloc_table table{};
     vita_reloc_identity identity{};
     vita_reloc_error error{};
-    const vita_reloc_status status = vita_reloc_validate_elf_identity(
-        module.bytes().data(), module.bytes().size(), &table, &identity, &error);
+    const vita_reloc_status status =
+        vita_reloc_validate_elf_identity_except(
+            module.bytes().data(), module.bytes().size(),
+            post_link_patches.empty() ? nullptr : post_link_patches.data(),
+            static_cast<std::uint32_t>(post_link_patches.size()),
+            &table, &identity, &error);
     const std::uint32_t streams = table.streams;
     vita_reloc_free(&table);
     if (status == VITA_RELOC_ERROR_NO_MEMORY) {
@@ -508,65 +531,68 @@ ParsedPostLink parse_post_link(const ModuleState &state) {
                           VITA_LOADER_ERROR_RELOCATION) >>
                  4U) &
                 UINT32_C(0x00ffffff);
-            if (block_size < 4U || (block_size - 4U) % 8U != 0U) {
+            if (block_size < 4U) {
                 throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
             }
-            const std::uint32_t site_count = (block_size - 4U) / 8U;
-            if (site_count > kMaximumMetadataRecords) {
+            const ResolvedBytes block_bytes = resolve_virtual(
+                module, block_address, block_size,
+                VITA_LOADER_ERROR_RELOCATION);
+            VariableRelocationTable relocations;
+            vita_reloc_error relocation_error{};
+            const vita_reloc_status relocation_status =
+                vita_var_reloc_parse_block(
+                    bytes.data() + block_bytes.file_offset, block_size,
+                    &relocations.value, &relocation_error);
+            if (relocation_status == VITA_RELOC_ERROR_NO_MEMORY) {
+                throw std::bad_alloc();
+            }
+            if (relocation_status != VITA_RELOC_OK ||
+                relocations.value.n > kMaximumMetadataRecords) {
                 throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
             }
-            if (site_count != 0U &&
-                block_address >
-                    std::numeric_limits<std::uint32_t>::max() - 4U) {
-                throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
-            }
-            const ResolvedBytes records =
-                site_count == 0U
-                    ? ResolvedBytes{0U, 0U}
-                    : resolve_virtual(module, block_address + 4U,
-                                      site_count * 8U,
-                                      VITA_LOADER_ERROR_RELOCATION);
             std::vector<vita_var_site> absolute_sites;
             std::optional<std::uint32_t> target;
             std::optional<std::uint16_t> pending_low;
             std::uint32_t pending_addend = 0U;
-            for (std::uint32_t site_index = 0U; site_index < site_count;
+            for (std::uint32_t site_index = 0U;
+                 site_index < relocations.value.n;
                  ++site_index) {
-                const std::size_t record =
-                    records.file_offset + site_index * 8U;
-                const std::uint32_t attributes =
-                    read_u32(bytes, record, VITA_LOADER_ERROR_RELOCATION);
-                const std::uint32_t offset =
-                    read_u32(bytes, record + 4U, VITA_LOADER_ERROR_RELOCATION);
-                const std::uint32_t code = (attributes >> 8U) & UINT32_C(0xff);
-                const std::uint32_t addend =
-                    (attributes >> 16U) & UINT32_C(0xfff);
-                if (info_segment.virtual_address >
-                    std::numeric_limits<std::uint32_t>::max() - offset) {
+                const vita_var_reloc_entry &relocation =
+                    relocations.value.v[site_index];
+                const ValidatedSegment &patch_segment =
+                    segment_for_program_header(
+                        module, relocation.patch_seg,
+                        VITA_LOADER_ERROR_RELOCATION);
+                if (patch_segment.virtual_address >
+                    std::numeric_limits<std::uint32_t>::max() -
+                        relocation.offset) {
                     throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
                 }
                 const std::uint32_t address =
-                    info_segment.virtual_address + offset;
-                if (code == 2U) {
-                    const ResolvedBytes site = resolve_virtual(
-                        module, address, 4U, VITA_LOADER_ERROR_RELOCATION);
+                    patch_segment.virtual_address + relocation.offset;
+                const std::size_t site = relative_file_offset(
+                    module, patch_segment, relocation.offset, 4U,
+                    VITA_LOADER_ERROR_RELOCATION);
+                parsed.variable_patch_addresses.push_back(address);
+                if (relocation.code == 2U) {
                     add_target_candidate(target,
-                                         read_u32(bytes, site.file_offset,
+                                         read_u32(bytes, site,
                                                   VITA_LOADER_ERROR_RELOCATION),
-                                         addend);
+                                         relocation.addend);
                     absolute_sites.push_back(vita_var_site{
                         address,
-                        addend,
+                        relocation.addend,
                     });
-                } else if (code == 0x2FU) {
+                } else if (relocation.code == 0x2FU) {
                     if (pending_low.has_value()) {
                         throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
                     }
                     pending_low =
                         decode_thumb_immediate(module, address, false);
-                    pending_addend = addend;
-                } else if (code == 0x30U) {
-                    if (!pending_low.has_value() || pending_addend != addend) {
+                    pending_addend = relocation.addend;
+                } else if (relocation.code == 0x30U) {
+                    if (!pending_low.has_value() ||
+                        pending_addend != relocation.addend) {
                         throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
                     }
                     const std::uint32_t relocated =
@@ -574,13 +600,15 @@ ParsedPostLink parse_post_link(const ModuleState &state) {
                         (static_cast<std::uint32_t>(
                              decode_thumb_immediate(module, address, true))
                          << 16U);
-                    add_target_candidate(target, relocated, addend);
+                    add_target_candidate(
+                        target, relocated, relocation.addend);
                     pending_low.reset();
                 } else {
                     throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
                 }
             }
-            if (pending_low.has_value() || !target.has_value()) {
+            if (pending_low.has_value() ||
+                (relocations.value.n != 0U && !target.has_value())) {
                 throw ParseFailure(VITA_LOADER_ERROR_RELOCATION);
             }
             parsed.variable_sites.push_back(std::move(absolute_sites));
@@ -588,12 +616,18 @@ ParsedPostLink parse_post_link(const ModuleState &state) {
                 vita_binding_variable_import_metadata{
                     import.library_nid,
                     read_u32(bytes, variable_nids.file_offset + index * 4U),
-                    *target,
+                    target.value_or(0U),
                     nullptr,
                     0U,
                 });
         }
     }
+    std::sort(parsed.variable_patch_addresses.begin(),
+              parsed.variable_patch_addresses.end());
+    parsed.variable_patch_addresses.erase(
+        std::unique(parsed.variable_patch_addresses.begin(),
+                    parsed.variable_patch_addresses.end()),
+        parsed.variable_patch_addresses.end());
     for (std::size_t index = 0U; index < parsed.variable_imports.size();
          ++index) {
         const std::vector<vita_var_site> &sites = parsed.variable_sites[index];
@@ -628,7 +662,8 @@ validate_module_extension(const std::uint8_t *bytes, std::size_t size,
         std::uint32_t completed =
             requested_validation & VITA_LOADER_VALIDATE_MODULE_INFO;
         if ((requested_validation & VITA_LOADER_VALIDATE_RELOCATIONS) != 0U) {
-            validate_identity_relocations(*state.content);
+            validate_identity_relocations(
+                *state.content, parsed.variable_patch_addresses);
             completed |= VITA_LOADER_VALIDATE_RELOCATIONS;
         }
         state.parsed = std::move(parsed);
@@ -1100,6 +1135,12 @@ PreparedTitle prepare_title(const ValidatedContent &content,
                 segment.alignment,
             });
         }
+        std::sort(
+            state.loader_segments.begin(), state.loader_segments.end(),
+            [](const vita_loader_segment_metadata &left,
+               const vita_loader_segment_metadata &right) {
+                return left.program_header_index < right.program_header_index;
+            });
         state.loader_metadata = vita_loader_module_metadata{
             module.elf_type(),
             module.machine(),

@@ -225,6 +225,7 @@ Check an isolated external Vita3K workflow without launching the title:
 ```powershell
 $privateRoot = '<absolute-ignored-private-data-root>'
 $vita3k = Join-Path $privateRoot 'vita3k\Vita3K.exe'
+$armrecomp = '<absolute-path-to-pinned-armrecomp.exe>'
 $revision = '<40-character-vita3k-source-revision>'
 
 pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
@@ -232,6 +233,7 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Vita3KExecutable $vita3k `
   -Vita3KSourceRevision $revision `
   -PrivateDataRoot $privateRoot `
+  -ArmrecompExecutable $armrecomp `
   -Phase All -DryRun -Redact
 ```
 
@@ -243,6 +245,7 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Vita3KExecutable $vita3k `
   -Vita3KSourceRevision $revision `
   -PrivateDataRoot $privateRoot `
+  -ArmrecompExecutable $armrecomp `
   -Phase Install
 
 pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
@@ -250,12 +253,15 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Vita3KExecutable $vita3k `
   -Vita3KSourceRevision $revision `
   -PrivateDataRoot $privateRoot `
+  -ArmrecompExecutable $armrecomp `
   -Phase Dump
 ```
 
 Vita3K remains a separate extraction/oracle process. These commands do not
-make it a host dependency. The full isolation, empty-dump-root, patch, and
-manifest rules are in [`content-pipeline.md`](content-pipeline.md) and
+make it a host dependency. The dump phase preserves raw ELFs, normalizes a
+separate runtime-image tree with `armrecomp`, and manifests only that tree.
+The full isolation, empty-root, relocation, patch, and manifest rules are in
+[`content-pipeline.md`](content-pipeline.md) and
 [`../patches/vita3k/README.md`](../patches/vita3k/README.md).
 
 ## Direct safety checks
