@@ -10,11 +10,15 @@
 #include "vitarecomp/loader.h"
 #include "vitarecomp/reloc.h"
 #include "vitarecomp/runtime.h"
+extern "C" {
+#include "vitarecomp/mem.h"
+}
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <optional>
@@ -771,6 +775,231 @@ bool module_contains(const ValidatedModule &module, std::uint32_t address,
     return false;
 }
 
+struct RuntimeVariableProviders {
+    std::vector<vita_binding_variable_provider> providers;
+    std::vector<vita_mem_strict_range> strict_ranges;
+    std::vector<std::array<char, 64U>> owned_names;
+};
+
+RuntimeVariableProviders
+prepare_runtime_variable_providers(const std::vector<ModuleState> &states) {
+    struct ProviderSpec {
+        std::uint32_t library_nid;
+        std::uint32_t variable_nid;
+        const char *name;
+        bool must_be_loaded;
+        bool initialize;
+        std::uint32_t initial_value;
+    };
+    constexpr std::array specs{
+        ProviderSpec{
+            UINT32_C(0xCAE9ACE6),
+            UINT32_C(0x93B8AA67),
+            "SceLibKernel::__stack_chk_guard",
+            false,
+            true,
+            UINT32_C(0x0DEADBEE),
+        },
+        ProviderSpec{
+            UINT32_C(0x5AD9C136),
+            UINT32_C(0xDF084DFA),
+            "SceLibcParam::__sce_libcparam",
+            true,
+            false,
+            0U,
+        },
+    };
+
+    RuntimeVariableProviders result;
+    std::size_t variable_count = 0U;
+    for (const ModuleState &state : states) {
+        variable_count += state.parsed.variable_imports.size();
+    }
+    result.providers.reserve(specs.size() + variable_count);
+    result.strict_ranges.reserve(variable_count);
+    result.owned_names.reserve(variable_count);
+    for (const ProviderSpec &spec : specs) {
+        std::optional<std::uint32_t> address;
+        for (std::size_t module_index = 0U; module_index < states.size();
+             ++module_index) {
+            const ModuleState &state = states[module_index];
+            for (std::size_t record_index = 0U;
+                 record_index < state.parsed.variable_imports.size();
+                 ++record_index) {
+                const vita_binding_variable_import_metadata &variable =
+                    state.parsed.variable_imports[record_index];
+                if (variable.library_nid != spec.library_nid ||
+                    variable.variable_nid != spec.variable_nid) {
+                    continue;
+                }
+                if (variable.target_address == 0U ||
+                    (address.has_value() &&
+                     *address != variable.target_address)) {
+                    fail_preparation(
+                        TitlePreparationStage::binding,
+                        VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH,
+                        static_cast<std::uint32_t>(module_index),
+                        static_cast<std::uint32_t>(record_index));
+                }
+                address = variable.target_address;
+            }
+        }
+        if (!address.has_value()) {
+            continue;
+        }
+
+        bool loaded = false;
+        for (const ModuleState &state : states) {
+            loaded = loaded ||
+                     module_contains(*state.content, *address, sizeof(std::uint32_t));
+        }
+        if (loaded != spec.must_be_loaded) {
+            fail_preparation(
+                TitlePreparationStage::binding,
+                VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH);
+        }
+        if (spec.initialize &&
+            vita_mem_copy_to_guest(
+                *address, &spec.initial_value,
+                sizeof(spec.initial_value)) != 0) {
+            fail_preparation(
+                TitlePreparationStage::binding,
+                VITA_BINDING_ERROR_EXPORT_RANGE);
+        }
+        result.providers.push_back(vita_binding_variable_provider{
+            spec.library_nid,
+            spec.variable_nid,
+            *address,
+            spec.name,
+        });
+    }
+
+    for (std::size_t module_index = 0U; module_index < states.size();
+         ++module_index) {
+        const ModuleState &state = states[module_index];
+        for (std::size_t record_index = 0U;
+             record_index < state.parsed.variable_imports.size();
+             ++record_index) {
+            const vita_binding_variable_import_metadata &variable =
+                state.parsed.variable_imports[record_index];
+            const bool known = std::any_of(
+                specs.begin(), specs.end(),
+                [&variable](const ProviderSpec &spec) {
+                    return spec.library_nid == variable.library_nid &&
+                           spec.variable_nid == variable.variable_nid;
+                });
+            if (known || variable.target_address == 0U) {
+                continue;
+            }
+
+            bool exported_at_target = false;
+            for (const ModuleState &candidate : states) {
+                for (const vita_binding_export_metadata &item :
+                     candidate.parsed.exports) {
+                    exported_at_target =
+                        exported_at_target ||
+                        (item.kind != VITA_BINDING_EXPORT_FUNCTION &&
+                         item.library_nid == variable.library_nid &&
+                         item.symbol_nid == variable.variable_nid &&
+                         item.address == variable.target_address);
+                }
+            }
+            if (exported_at_target) {
+                continue;
+            }
+
+            const auto existing = std::find_if(
+                result.providers.begin(), result.providers.end(),
+                [&variable](const vita_binding_variable_provider &provider) {
+                    return provider.library_nid == variable.library_nid &&
+                           provider.variable_nid == variable.variable_nid;
+                });
+            if (existing != result.providers.end()) {
+                if (existing->address != variable.target_address) {
+                    fail_preparation(
+                        TitlePreparationStage::binding,
+                        VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH,
+                        static_cast<std::uint32_t>(module_index),
+                        static_cast<std::uint32_t>(record_index));
+                }
+                continue;
+            }
+
+            const vita_var_import *generated = nullptr;
+            for (std::uint32_t index = 0U;
+                 index < state.generated->variable_import_count; ++index) {
+                const vita_var_import &candidate =
+                    state.generated->variable_imports[index];
+                if (candidate.lib_nid == variable.library_nid &&
+                    candidate.var_nid == variable.variable_nid) {
+                    if (generated != nullptr) {
+                        fail_preparation(
+                            TitlePreparationStage::binding,
+                            VITA_BINDING_ERROR_VARIABLE_METADATA,
+                            static_cast<std::uint32_t>(module_index),
+                            static_cast<std::uint32_t>(record_index));
+                    }
+                    generated = &candidate;
+                }
+            }
+            if (generated == nullptr ||
+                (variable.target_address & UINT32_C(0xFFF)) != 0U) {
+                fail_preparation(
+                    TitlePreparationStage::binding,
+                    VITA_BINDING_ERROR_VARIABLE_METADATA,
+                    static_cast<std::uint32_t>(module_index),
+                    static_cast<std::uint32_t>(record_index));
+            }
+            for (const vita_mem_strict_range &range : result.strict_ranges) {
+                if (range.address == variable.target_address ||
+                    (static_cast<std::uint64_t>(range.address) + range.size >
+                         variable.target_address &&
+                     static_cast<std::uint64_t>(variable.target_address) +
+                             sizeof(std::uint32_t) >
+                         range.address)) {
+                    fail_preparation(
+                        TitlePreparationStage::binding,
+                        VITA_BINDING_ERROR_AMBIGUOUS_VARIABLE,
+                        static_cast<std::uint32_t>(module_index),
+                        static_cast<std::uint32_t>(record_index));
+                }
+            }
+
+            const char *name = generated->name;
+            if (name == nullptr || *name == '\0') {
+                std::array<char, 64U> &owned_name =
+                    result.owned_names.emplace_back();
+                const int written = std::snprintf(
+                    owned_name.data(), owned_name.size(),
+                    "UnresolvedVariable::%08X:%08X",
+                    variable.library_nid, variable.variable_nid);
+                if (written < 0 ||
+                    static_cast<std::size_t>(written) >= owned_name.size()) {
+                    fail_preparation(
+                        TitlePreparationStage::binding,
+                        VITA_BINDING_ERROR_VARIABLE_METADATA,
+                        static_cast<std::uint32_t>(module_index),
+                        static_cast<std::uint32_t>(record_index));
+                }
+                name = owned_name.data();
+            }
+            result.providers.push_back(vita_binding_variable_provider{
+                variable.library_nid,
+                variable.variable_nid,
+                variable.target_address,
+                name,
+            });
+            result.strict_ranges.push_back(vita_mem_strict_range{
+                variable.target_address,
+                sizeof(std::uint32_t),
+                variable.variable_nid,
+                name,
+            });
+        }
+    }
+    return result;
+}
+
 void validate_descriptor(const ModuleState &state, std::uint32_t module_index) {
     const ValidatedModule &module = *state.content;
     const vita_generated_module_descriptor &generated = *state.generated;
@@ -957,12 +1186,14 @@ struct PreparedTitle::State {
 
     ~State() {
         vita_binding_view_destroy(&binding_view);
+        vita_mem_clear_strict_ranges();
         runtime.reset();
     }
 
     Logger &logger;
     std::unique_ptr<RuntimeSession> runtime;
     vita_binding_view binding_view{};
+    std::vector<std::array<char, 64U>> strict_variable_names;
     vita_guest_entry_fn entry = nullptr;
 };
 
@@ -1206,14 +1437,31 @@ PreparedTitle prepare_title(const ValidatedContent &content,
             &state.post_link,
         });
     }
+    RuntimeVariableProviders runtime_variable_providers =
+        prepare_runtime_variable_providers(states);
+    prepared->strict_variable_names =
+        std::move(runtime_variable_providers.owned_names);
     vita_binding_error binding_error{};
     const vita_binding_status binding_status = vita_binding_install_module_set(
-        binding_modules.data(), binding_modules.size(), nullptr, 0U,
+        binding_modules.data(), binding_modules.size(),
+        runtime_variable_providers.providers.empty()
+            ? nullptr
+            : runtime_variable_providers.providers.data(),
+        runtime_variable_providers.providers.size(),
         &prepared->binding_view, &binding_error);
     if (binding_status != VITA_BINDING_OK) {
         fail_preparation(TitlePreparationStage::binding, binding_status,
                          binding_error.module_index, binding_error.record_index,
                          binding_error.site_index);
+    }
+    const int strict_range_status = vita_mem_set_strict_ranges(
+        runtime_variable_providers.strict_ranges.empty()
+            ? nullptr
+            : runtime_variable_providers.strict_ranges.data(),
+        runtime_variable_providers.strict_ranges.size());
+    if (strict_range_status != VITA_OK) {
+        fail_preparation(TitlePreparationStage::binding,
+                         VITA_BINDING_ERROR_EXPORT_RANGE);
     }
     test_preparation_gate(TitlePreparationStage::binding);
 

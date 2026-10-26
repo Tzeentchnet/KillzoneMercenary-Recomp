@@ -120,7 +120,9 @@ expected identity without logging either value. It then completes, in order:
 5. strict in-memory module-set preflight;
 6. transactional load plus module-table and relocation-extension validation;
 7. generated descriptor, entry, TLS, and global-dispatch agreement;
-8. complete export/function-import/variable-import binding;
+8. complete export/function-import/variable-import binding, including
+   evidence-backed Vita runtime variables and named strict-on-access providers
+   for unresolved four-byte objects;
 9. checked main-stack preparation;
 10. checked TLS-template preparation;
 11. deterministic module-start CPU-state preparation; and

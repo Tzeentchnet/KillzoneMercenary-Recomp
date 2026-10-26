@@ -6,17 +6,18 @@ Windows with DX12 and Vulkan at 30 fps or higher ([GOAL.md](GOAL.md)).
 **Current milestones: M1 (lift and link) and M2 (into title code)**
 ([ROADMAP.md](ROADMAP.md)). The code path that builds a local generated
 bundle into the host and enters it exists. Its first real-bundle attempt
-reached strict module preflight and stopped before entry on non-identity
-relocation evidence.
+now passes relocation preflight and binding, then calls translated title code.
+The measured first stop is a named missing firmware import.
 
 | Milestone | State |
 |---|---|
 | M0 Foundation | ✅ Done (2026-10-25) |
 | M1 Lift and link | ▶ Build path done. Trap ranking and symbol map open |
-| M2 Into title code | ▶ First real-bundle run done. Relocation normalization blocks entry |
+| M2 Into title code | ▶ Translated entry reached. First missing firmware import named |
 | M3–M7 | Not started |
 
-The game does not boot yet. No translated Killzone code has run.
+The game does not boot yet. Translated Killzone code has run once through the
+strict native entry boundary.
 
 ## What exists today
 
@@ -24,23 +25,22 @@ The game does not boot yet. No translated Killzone code has run.
 |---|---|
 | Recompiler (`armrecomp`, framework) | All three post-link runtime images lift and compile with MSVC `/W4 /WX`. Coverage is 96.37% of executable bytes. 99.897% of emitted instructions are translated, with **3,770 explicit traps** left. Output is deterministic across runs |
 | Linking | `armrecomp compose` builds one registry across modules. `KZMRECOMP_GENERATED_SOURCE_DIR` builds a provenance-validated local bundle into the host ([generated-source-provenance.md](generated-source-provenance.md)). Empty by default and in CI |
-| Title entry | The title session loads the module set from retained bytes, binds imports, prepares stack/TLS/CPU, and calls the entry module's `module_start` once through `vita_guest_call`. The first real-bundle attempt exited 11 during module preflight with zero entry calls. Exit 0 = clean return, 11 = preparation failure, 12 = first strict failure, 13 = exit request; 9 = no bundle ([NATIVE_HOST.md](NATIVE_HOST.md)) |
+| Title entry | The title session loads the module set from retained bytes, binds imports, prepares stack/TLS/CPU, and calls the entry module's `module_start` once through `vita_guest_call`. The preserved real bundle reached entry once and exited 12 at `nid_BE43BB07::nid_BFE02B3A` from `0x818C37A8`. Exit 0 = clean return, 11 = preparation failure, 12 = first strict failure, 13 = exit request; 9 = no bundle ([NATIVE_HOST.md](NATIVE_HOST.md)) |
 | Memory plan | Derived from the validated load ranges: a window of up to 256 MiB with heap, sysmem, kernel, main-stack, and TLS arenas. No GPU-mapped region yet |
 | Runtime/HLE (framework) | Checked memory, ARM/VFP CPU state, baton scheduler, threads and sync, allocators, libc/libm, import registry, I/O/FIOS2 (synchronous), ULT sync subset, VFS/PSARC |
 | GXM / GXP / USSE | Not started (M3). This is the largest single piece of work |
 | Display, audio, input, movies, saves | Not started (M3–M4) |
 | GPU contract and backends (framework) | Production DX12 and Vulkan backends behind one C ABI, with one HLSL source compiled by pinned DXC to DXIL and SPIR-V. Self-test verified on DX12 WARP, DX12 hardware, and Vulkan with validation |
 | Windows host (this repository) | Strict CLI, manifest/ELF validation, read-only `app0:` mount, explicit renderer selection with no fallback, clear/triangle self-test, title session |
-| Content pipeline (this repository) | Archive inspector, isolated Vita3K post-link ELF dump through two patches, deterministic manifest generator, provenance tools, private-content guard |
+| Content pipeline (this repository) | Archive inspector, isolated post-link ELF extraction, deterministic identity normalization with validated variable-target preservation, manifest generator, provenance tools, private-content guard |
 | CI | Public, source-only Windows jobs: quality, plus Debug/RelWithDebInfo/Release build and test |
 
 ## Known blockers, in order
 
-1. The first real-bundle run stops during module preflight because module
-   index 0 is not identity-relocated at its declared ELF addresses. Of
-   9,429 relocation records, 858 would change; the first is record 6.
-   Normalize the post-link image before manifesting and regenerating the
-   bundle, then rerun to reach the first strict title failure (M2).
+1. The first translated title call stops at the unimplemented firmware import
+   `nid_BE43BB07::nid_BFE02B3A` from `0x818C37A8`. Implement or identify that
+   import from native-run evidence, then rerun to expose the next boot-path
+   dependency (M2).
 2. The trap census has not been ranked by boot-path reachability, and
    there is no symbol map for naming failures (M1).
 3. Only the entry module's `module_start` runs; the other modules are not
@@ -86,7 +86,7 @@ failure. All inputs were public or synthetic.
 
 | Component | Revision |
 |---|---|
-| Framework pin (`third_party/vitarecomp`, `config/framework.commit`) | `a7392ce3d07307db5814a9da9703413d06f87da2`: strict title entry plus real-bundle metadata compatibility. Focused Windows tests pass; the fork's static-quality tooling fix remains parked in [`patches/vitarecomp`](../patches/vitarecomp/README.md) |
+| Framework pin (`third_party/vitarecomp`, `config/framework.commit`) | `12e950a6007d7c1229456c5dd6334fa2d3e9abdf`: post-link variable preservation plus named strict-on-access providers. Focused Windows tests pass |
 | M0 framework pin | `f3408e1ea73b724c7ba3a644633938c220f2cc2a` |
 | Upstream base (`sp00nznet/vitarecomp`) | `6ed4a5c59045706292c8ec03dfe5207ecc4033a4`, tagged `upstream-start-6ed4a5c5` in the fork. Upstream has no later commits |
 | M0 accepted game revision | `36fef0e94ab99d1fc6e1903f02a388013eb3585d` |
@@ -97,6 +97,11 @@ failure. All inputs were public or synthetic.
 Add one short entry per meaningful step: what now works, and the measured
 number if there is one. Do not write separate verification reports.
 
+- **2026-10-26:** The preserved three-module DX12 bundle completed relocation
+  preflight and strict binding, prepared the main stack, called translated
+  title entry once, and exited 12 at `nid_BE43BB07::nid_BFE02B3A` from
+  `0x818C37A8`. Unresolved variable storage remains named and strict-on-access;
+  no dead-beef success stub or emulator fallback was introduced.
 - **2026-10-26:** The first provenance-validated three-module real-bundle
   DX12 title attempt validated 3 modules and 6 segments, initialized the
   runtime and read-only mount, then exited 11 at `module_preflight`

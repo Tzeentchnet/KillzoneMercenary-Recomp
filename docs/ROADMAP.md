@@ -9,7 +9,7 @@ behavior of the real game, not on reports.
 |---|---|---|
 | [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
 | [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
-| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: first real-bundle run done, relocation normalization blocks entry |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: translated entry reached; first missing firmware import named |
 | [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
 | [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
 | [M5](#m5--first-mission) | Mission 1 playable start to finish | |
@@ -156,10 +156,13 @@ Tasks:
       all three modules, then exited 11 during module preflight with zero
       entry calls. The aggregate outcome is in
       [PROJECT_STATUS.md](PROJECT_STATUS.md#log).
-- [ ] **Content pipeline:** normalize dumped relocation records to the
-      ELF-declared identity addresses before manifest generation, verify
-      zero changed/unsupported/out-of-file records, and rerun to reach the
-      first strict title failure.
+- [x] **Content pipeline:** normalize identity relocation records before
+      manifest generation while preserving 1,516 validated post-link variable
+      records. The real set now reports zero changed, unsupported, or
+      out-of-file records.
+- [x] **Run it:** the preserved three-module bundle bound, prepared the main
+      stack, called translated title entry once, and exited 12 at the named
+      strict import `nid_BE43BB07::nid_BFE02B3A` from `0x818C37A8`.
 - [ ] **Game:** run `module_start` for the other modules in dependency
       order before the entry module, deriving the order from retained module
       metadata and native-run dependencies. Today only the selected entry
