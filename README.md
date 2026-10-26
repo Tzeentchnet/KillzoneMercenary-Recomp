@@ -26,8 +26,9 @@ your lawful dump
 The framework is [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp),
 a fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp).
 It provides the recompiler, the runtime/HLE, and the DX12/Vulkan backends.
-Vita3K is used only as an external content-preparation tool, behavioral
-oracle, and reference. It is not forked, extended, linked, or shipped.
+Vita3K is used only as an external content-preparation tool and source-code
+reference. Its runtime output is not a review gate, and it is not forked,
+extended, linked, or shipped.
 
 ## Current status
 

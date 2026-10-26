@@ -41,8 +41,9 @@ These replace the old "close every gate before running" ordering.
 
   Replacing stubs with real implementations is tracked work. What stays
   forbidden is a silent success path.
-- **Oracle, not fork.** Vita3K is used only as described in
-  [GOAL.md](GOAL.md#vita3ks-role-oracle-and-reference-only).
+- **Extraction/reference, not a gate.** Vita3K is used only as described in
+  [GOAL.md](GOAL.md#vita3ks-role-extraction-and-code-reference-only). Its
+  runtime output is not review evidence or an acceptance criterion.
 - **Content stays private.** Dumps, generated C, traces, captures, and
   shader caches stay in ignored local roots
   ([CONTENT_POLICY.md](CONTENT_POLICY.md)). Public CI stays source-only.
@@ -130,8 +131,8 @@ Exit criteria:
 3. An import inventory is written on every run. It lists each import as
    implemented, stubbed, or missing, with call counts, and nothing is
    missing on the boot path.
-4. The import call sequence matches a Vita3K `log_imports` run of the same
-   build up to the first frame. Any deviation is explained.
+4. The ordered import sequence up to the first frame is identical across the
+   three clean native runs. Any native-run deviation is a failure.
 
 Tasks:
 
@@ -160,8 +161,9 @@ Tasks:
       zero changed/unsupported/out-of-file records, and rerun to reach the
       first strict title failure.
 - [ ] **Game:** run `module_start` for the other modules in dependency
-      order before the entry module, taking the order from the oracle's
-      module-load log. Today only the selected entry module is started.
+      order before the entry module, deriving the order from retained module
+      metadata and native-run dependencies. Today only the selected entry
+      module is started.
 - [ ] **Game:** print the first strict failure with its symbol name once
       the M1 symbol map exists.
 - [ ] **Framework:** grow kernel, thread, synchronization, sysmem, I/O,
@@ -176,14 +178,13 @@ Tasks:
 ## M3 — First frame
 
 **Outcome:** the first frame the game itself renders, such as a logo or
-splash screen, is presented through DX12 and then Vulkan, and matches the
-oracle's screenshot.
+splash screen, is presented through DX12 and then Vulkan.
 
 Exit criteria:
 
-1. A captured first frame matches the oracle's screenshot of the same frame
-   on both backends. "Matches" means visually equivalent, with the metric
-   chosen when the frame exists.
+1. Both backends produce a valid, nonblank first frame and their captures are
+   visually equivalent to each other, with the metric chosen when the frame
+   exists.
 2. Every `sceGxm` call on the path to that frame is implemented; none are
    stubbed.
 3. GXP programs on that path are translated by our USSE → HLSL translator

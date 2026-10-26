@@ -17,11 +17,12 @@ Public builds contain no bundle and exit 9 in title mode.
 |---|---|---|
 | [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/a7392ce3d07307db5814a9da9703413d06f87da2) (fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp)) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
 | This game repository | PCSA00107 policy and configuration; native Windows host; strict content/manifest validation; external-content workflow; local generated-source staging; title-specific compatibility work | Retail data, keys, generated title code, Vita3K source/runtime, or a second production recompiler |
-| External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, behavioral-oracle observations (screenshots, import logs), and source reading as reference | Production CPU execution, native-host services, renderer fallback, a runtime dependency, or project feature work (no fork) |
+| External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, and source reading as code reference | Review or acceptance evidence, production CPU execution, native-host services, renderer fallback, a runtime dependency, or project feature work (no fork) |
 | Ignored local private roots | User-supplied archive, portable Vita3K state, runtime images, manifests, reports, captures, and generated code | Git history, hosted CI, published source archives, or shared build artifacts |
 
-Vita3K is therefore an extraction/oracle tool only. The native application
-does not link it, launch it, or fall back to it.
+Vita3K is therefore an extraction and source-reference tool only. Its runtime
+output is not a review gate. The native application does not link it, launch
+it, or fall back to it.
 
 ## Execution pipeline
 

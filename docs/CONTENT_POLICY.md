@@ -22,9 +22,10 @@ credentials.
 
 ## Architecture boundary
 
-Vita3K is an external installation/decryption, post-link extraction, and
-optional behavioral-oracle process only. It is not vendored, linked, launched
-by the native host, or used as a CPU/renderer fallback. The native host
+Vita3K is an external installation/decryption and post-link extraction process,
+plus a source-code reference. Its runtime output is not review evidence. It is
+not vendored, linked, launched by the native host, or used as a CPU/renderer
+fallback. The native host
 independently validates the resulting ELF manifest before mounting its root
 read-only as `app0:`.
 

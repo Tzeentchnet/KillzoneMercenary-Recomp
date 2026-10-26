@@ -5,19 +5,18 @@
 This directory contains the minimal generic Vita3K changes required by the
 external content workflow. It does not contain Vita3K source, title bytes,
 title addresses, generated code, user-data paths, or game-specific matching.
-Vita3K remains a separately built and executed extraction/oracle tool; neither
+Vita3K remains a separately built and executed extraction tool; neither
 patch makes it part of the native host or the production CPU path.
 
 ## Scope: frozen
 
-This series is complete and frozen. Vita3K is an external oracle and
-reference for this project, not something we fork or extend (see
-[`docs/GOAL.md`](../../docs/GOAL.md#vita3ks-role-oracle-and-reference-only)).
+This series is complete and frozen. Vita3K is an external extraction tool and
+source-code reference for this project, not a review gate or something we fork
+or extend (see
+[`docs/GOAL.md`](../../docs/GOAL.md#vita3ks-role-extraction-and-code-reference-only)).
 Do not rebase these patches, port them to newer Vita3K revisions, or add
-features unless the extraction itself breaks. A new patch is acceptable only
-as an out-of-process oracle instrument that serves a current milestone, and
-needs owner approval. Prefer Vita3K's existing options, such as import
-logging, over patching.
+features unless the extraction itself breaks and the owner explicitly approves
+the repair.
 
 ## Pinned base
 
@@ -63,8 +62,8 @@ Its broadly reusable state, memory, dispatch, and exclusive-monitor cases were
 migrated into the canonical framework. At framework
 `f3408e1ea73b724c7ba3a644633938c220f2cc2a`, mode-aware CPU/dispatch,
 checked/exclusive-memory, and strict-diagnostic cases execute in public tests.
-Any future full-state Vita3K oracle adapter must be a separate optional series;
-it must not be required to dump modules or run the native application.
+No Vita3K runtime-state adapter is planned or required to dump modules or run
+the native application.
 
 ## Validation
 

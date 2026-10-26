@@ -24,8 +24,9 @@ On-track work:
 Off-track work. Do not do it unless the owner explicitly asks:
 
 - Vita3K features, Vita3K bug fixes, rebasing the dump patches, or any
-  Vita3K fork work. Vita3K is only an external oracle and reference
-  ([GOAL.md](docs/GOAL.md#vita3ks-role-oracle-and-reference-only)).
+  Vita3K fork work. Vita3K is only an external extraction tool and source-code
+  reference; its runtime output is not a review or acceptance gate
+  ([GOAL.md](docs/GOAL.md#vita3ks-role-extraction-and-code-reference-only)).
 - New or reworded verification reports, provenance manifests, migration
   tables, audit write-ups, or "checkpoint" documents.
 - More CI jobs, more pinned tools, stricter redaction, or more guard rules,

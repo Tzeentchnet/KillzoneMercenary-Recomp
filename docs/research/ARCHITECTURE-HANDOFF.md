@@ -64,8 +64,8 @@ captures belong only in ignored local roots.
   runtime-addressed modules after relocation and export/import linking.
 - **Verified:** The required patch series contains only post-link dump ordering
   and an explicit headless `--dump-elfs` switch.
-- **Allowed:** A separately executed Vita3K may be used as an optional
-  behavioral oracle.
+- **Allowed:** Vita3K source may be read as a code reference; its separately
+  executed runtime is used only for the frozen extraction workflow.
 - **Rejected:** Vita3K is not vendored, linked, or used for production CPU,
   HLE, graphics, or fallback execution.
 

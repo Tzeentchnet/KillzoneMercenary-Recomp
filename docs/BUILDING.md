@@ -257,7 +257,8 @@ pwsh -NoProfile -File tools/content/Export-KillzoneRuntimeImages.ps1 `
   -Phase Dump
 ```
 
-Vita3K remains a separate extraction/oracle process. These commands do not
+Vita3K remains a separate extraction process and source-code reference. Its
+runtime output is not a review gate. These commands do not
 make it a host dependency. The dump phase preserves raw ELFs, normalizes a
 separate runtime-image tree with `armrecomp`, and manifests only that tree.
 The full isolation, empty-root, relocation, patch, and manifest rules are in

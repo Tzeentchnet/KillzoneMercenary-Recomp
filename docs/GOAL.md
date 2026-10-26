@@ -62,25 +62,26 @@ The internal resolution is the Vita's native 960x544. Higher resolutions and
 - Reports, audits, provenance manifests, or extra CI gates as deliverables in
   their own right. They are only worth doing when they unblock a milestone.
 
-## Vita3K's role: oracle and reference only
+## Vita3K's role: extraction and code reference only
 
-Vita3K is used in three ways and no others:
+Vita3K is used in two ways and no others:
 
 1. **Content preparation:** installing and decrypting the user's copy, and
    dumping post-link runtime ELF images. The two-patch series in
    [`patches/vita3k`](../patches/vita3k/README.md) is frozen to that purpose.
-2. **Behavioral oracle:** running the game separately to compare
-   screenshots, import call sequences, return values, and guest state with
-   the recompiled build.
-3. **Reference:** reading its source and documentation to understand GXM,
+2. **Code reference:** reading its source and documentation to understand GXM,
    USSE/GXP, and firmware behavior. We then write our own implementation in
    `vitarecomp` or this repository.
+
+Vita3K currently reaches only the game menu and is not a useful visual or
+behavioral oracle. Its screenshots, import traces, return values, and guest
+state are therefore not review evidence or milestone acceptance gates.
 
 We do **not** maintain a Vita3K fork, add Vita3K features, fix Vita3K bugs as
 project work, upstream changes to Vita3K, or link, vendor, or launch Vita3K
 from the native host. Any new Vita3K patch beyond the existing dump series
-must be an out-of-process oracle instrument, such as an import call logger,
-and needs owner approval.
+is out of scope unless the frozen extraction workflow itself breaks and the
+owner explicitly approves the repair.
 
 Both Vita3K and this project are GPL-2.0-or-later, so porting a small,
 self-contained piece with attribution is legally possible. The current
@@ -93,7 +94,7 @@ made case by case.
 |---|---|
 | Recompiler, runtime, title-neutral HLE (including the `sceGxm` bridge and GXP/USSE translator), shared GPU contract, DX12/Vulkan backends | Framework fork [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp), pinned here as `third_party/vitarecomp` |
 | Windows host, title boot sequence, title memory map, Killzone-specific hooks and patches, input mapping, settings, local build orchestration | This repository |
-| Extraction and oracle runs | External Vita3K checkout, never in either repository |
+| Extraction and source reading | External Vita3K checkout, never in either repository |
 
 The framework fork is based on
 [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp). It
