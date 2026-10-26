@@ -2,7 +2,7 @@
 
 This document describes how the native *Killzone Mercenary* build is put
 together: what exists at the framework pin
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`, and where the remaining pieces
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b`, and where the remaining pieces
 go on the way to the goal in [GOAL.md](GOAL.md). Milestone order is in
 [ROADMAP.md](ROADMAP.md).
 
@@ -13,7 +13,7 @@ code. M2 replaces that boundary with the real boot sequence.
 
 | Boundary | Owns | Must not own |
 |---|---|---|
-| [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/f3408e1ea73b724c7ba3a644633938c220f2cc2a) (fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp)) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
+| [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/0e81bb4b275435b2396b01a88c8d767d0104cc8b) (fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp)) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
 | This game repository | PCSA00107 policy and configuration; native Windows host; strict content/manifest validation; external-content workflow; local generated-source staging; title-specific compatibility work | Retail data, keys, generated title code, Vita3K source/runtime, or a second production recompiler |
 | External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, behavioral-oracle observations (screenshots, import logs), and source reading as reference | Production CPU execution, native-host services, renderer fallback, a runtime dependency, or project feature work (no fork) |
 | Ignored local private roots | User-supplied archive, portable Vita3K state, runtime images, manifests, reports, captures, and generated code | Git history, hosted CI, published source archives, or shared build artifacts |
@@ -169,10 +169,11 @@ and game report
 
 ## Framework references
 
-- [Pipeline architecture](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/ARCHITECTURE.md)
-- [CPU baseline](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/CPU_BASELINE.md)
-- [Runtime and HLE](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/HLE.md)
-- [GPU contract and Vulkan](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/GPU.md)
-- [Direct3D 12](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/DX12.md)
-- [Provenance](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/PROVENANCE.md)
-- [Framework quality gates](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/QUALITY_GATES.md)
+- [Pipeline architecture](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/ARCHITECTURE.md)
+- [CPU baseline](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/CPU_BASELINE.md)
+- [Runtime and HLE](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/HLE.md)
+- [Entry state and TLS](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/ENTRY_STATE.md)
+- [GPU contract and Vulkan](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/GPU.md)
+- [Direct3D 12](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/DX12.md)
+- [Provenance](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/PROVENANCE.md)
+- [Framework quality gates](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/QUALITY_GATES.md)

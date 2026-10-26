@@ -1,8 +1,9 @@
 # Quality gates
 
 The public Windows workflow requires no secrets or private game data.
-It validates the exact framework gitlink
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`.
+It validates that the framework gitlink matches
+`config/framework.commit` (currently
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b`).
 
 | Job | Required coverage |
 |---|---|

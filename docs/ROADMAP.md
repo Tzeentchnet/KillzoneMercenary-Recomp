@@ -82,24 +82,32 @@ Exit criteria:
 
 Tasks:
 
+- [x] **Framework:** compose multi-image output into one dispatch registry
+      and generation report (`armrecomp compose`, generated-module ABI,
+      framework `0e81bb4`, now pinned).
 - [ ] **Game:** add a `KZM_GENERATED_DIR` CMake option. It compiles the
-      staged generated C (`/bigobj`) and links it into the host. The option
-      is off by default, and CI never sets it.
+      staged generated C plus the composed registry (`/bigobj`) and links
+      them into the host. The option is off by default, and CI never sets
+      it.
 - [ ] **Game:** add `tools/build/Build-Title.ps1`. It chains manifest
-      validation, `armrecomp emit` per image, `Stage-GeneratedSources.ps1`,
-      configure, and build.
-- [ ] **Framework:** compose multi-image output into a single dispatch
-      registry and generation report. This is the deferred "multi-image
-      report composition" item.
-- [ ] **Framework:** a trap census that groups traps by kind, by function,
-      and by reachability from the module entries. Fix the largest
-      NEON/VFP, branch-target, and transfer-shape classes.
+      validation, `armrecomp emit` per image, `armrecomp compose`,
+      `Stage-GeneratedSources.ps1`, configure, and build.
+- [ ] **Framework:** rank the trap census by reachability from the module
+      entries (compose already classifies traps by kind), then fix the
+      largest NEON/VFP, branch-target, and transfer-shape classes on the
+      boot path.
 - [ ] **Framework/Game:** a symbol map format consumed by trap and dispatch
       diagnostics.
-- [ ] **Framework:** make the non-GPU targets build warnings-clean with
-      Linux clang and GCC, and skip the GPU targets off Windows, so that
-      cloud sessions can test CPU/HLE changes. Today they need
-      `ninja -k 0`; see [`CLAUDE.md`](../CLAUDE.md#building-and-testing).
+- [ ] **Framework:** build warnings-clean with Linux clang and GCC so that
+      cloud sessions can test CPU/HLE changes. The fix is done and verified
+      (zero warnings, 19/19 CTest on both compilers), but it is not pushed:
+      this session has no push access to the fork. It also fixes two real
+      bugs: NID names over 63 bytes were truncated into wrong HLE symbols,
+      and FIOS overlay paths could be silently truncated. See
+      [PROJECT_STATUS.md](PROJECT_STATUS.md#log).
+- [ ] **Framework:** fix the Windows quality gate, which fails on any C/C++
+      change because it hands LLVM's `git-clang-format.bat` to Python (fork
+      CI run 40255206038). The fix is done, not pushed (same reason).
 
 ## M2 — Into title code
 
@@ -126,13 +134,17 @@ Tasks:
       with the real title memory map. It covers every manifest load range
       plus stacks, heaps, kernel objects, and GPU-mapped (CDRAM-equivalent)
       memory.
-- [ ] **Game/Framework:** load the runtime-image segments at their recorded
-      addresses, set up TLS, stacks, and the initial CPU state, then run
-      `module_start` for each module in dependency order before the eboot
-      entry. Take the order from the oracle's module-load log.
-- [ ] **Framework:** bind import stubs by NID. Post-link images contain the
-      oracle loader's own stub bodies, so check how those are encoded and
-      never translate them as game code.
+- [x] **Framework:** strict module-set preflight/load, export/import
+      binding by NID, checked main-stack/TLS/CPU entry preparation, and the
+      `vita_guest_call` boundary that reports completion, an exit request,
+      or the first strict failure (framework `0e81bb4`; see its
+      `docs/ENTRY_STATE.md`).
+- [ ] **Game:** wire the host to those APIs. Load the composed module set
+      at its recorded addresses, bind imports, prepare stack/TLS/CPU, then
+      run `module_start` for each module in dependency order before the
+      eboot entry, each through `vita_guest_call`. Take the order from the
+      oracle's module-load log. Print the first strict failure with its
+      symbol name.
 - [ ] **Framework:** grow kernel, thread, synchronization, sysmem, I/O,
       FIOS2, ULT, and libc coverage as the run asks for it. That includes
       the ULT fiber scheduler and real asynchronous FIOS2 if the game

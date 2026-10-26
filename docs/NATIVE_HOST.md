@@ -5,8 +5,8 @@ standalone framework. It links `vitarecomp` and `vitarecomp::gpu` from the
 pinned submodule. It does not link or launch Vita3K, does not contain a JIT,
 and does not load generated Killzone code.
 
-The accepted gitlink is
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The host self-test and content
+The current framework pin is in `config/framework.commit`; M0 was accepted
+at `f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The host self-test and content
 boundary are verified; title boot and playability are not.
 
 ## Modes and options

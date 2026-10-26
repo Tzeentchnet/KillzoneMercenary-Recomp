@@ -72,18 +72,20 @@ ctest --preset windows-x64-debug
 ```
 
 Linux cloud containers cannot build the Win32 host or the DX12/Vulkan
-backends. They can build and test the framework's recompiler and runtime:
+backends. They can build and test the whole framework (recompiler, runtime,
+and GPU contract tests) once the pending patches in
+[`patches/vitarecomp`](patches/vitarecomp/README.md) are applied. Do that in
+a scratch worktree so the submodule stays at its pin:
 
 ```sh
-cd third_party/vitarecomp
-CC=clang CXX=clang++ cmake -G Ninja -S . -B <scratch>/fw -DCMAKE_BUILD_TYPE=Release
-cmake --build <scratch>/fw -- -k 0    # GPU targets fail on clang -Werror; the rest builds
-ctest --test-dir <scratch>/fw         # 11/13 pass; gpu-contract and gpu-c-abi do not build
+git -C third_party/vitarecomp worktree add --detach <scratch>/fw-src HEAD
+git -C <scratch>/fw-src am "$PWD"/patches/vitarecomp/*.patch
+cmake -G Ninja -S <scratch>/fw-src -B <scratch>/fw -DCMAKE_BUILD_TYPE=Debug
+cmake --build <scratch>/fw && ctest --test-dir <scratch>/fw    # 19/19, clang or GCC
 ```
 
-GCC currently fails `-Werror=format-truncation` in `nids.c` and
-`hle_fios.c`, so use clang. Keep build directories outside the repository
-(`out/` is ignored on Windows).
+Without the patches, the pinned framework fails `-Werror` on Linux. Keep
+build directories outside the repository (`out/` is ignored).
 
 Docs rules that CI enforces: relative Markdown links must resolve, there is
 no trailing whitespace, and each file ends with a newline.
