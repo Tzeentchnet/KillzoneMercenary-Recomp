@@ -14,6 +14,9 @@ enum class ExitCode : int {
     runtime_failed = 8,
     title_not_implemented = 9,
     window_failed = 10,
+    title_precondition_failed = 11,
+    title_strict_failure = 12,
+    title_exit_requested = 13,
     internal_error = 70,
 };
 

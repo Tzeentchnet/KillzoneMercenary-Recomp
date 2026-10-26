@@ -224,7 +224,12 @@ function Write-SyntheticManifest {
 
 function Invoke-ContentTests {
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
-    $workRoot = Join-Path $repositoryRoot 'out\test-data\native-host-integration'
+    $workRoot = Join-Path $repositoryRoot (
+        'out\test-data\native-host-integration-' +
+        $PID +
+        '-' +
+        [Guid]::NewGuid().ToString('N')
+    )
     $contentRoot = Join-Path $workRoot 'app0'
     $manifestPath = Join-Path $workRoot 'runtime-manifest.json'
     if (Test-Path -LiteralPath $workRoot) {
@@ -253,11 +258,17 @@ function Invoke-ContentTests {
             ($valid.ExitCode -eq 9) `
             "Valid content returned $($valid.ExitCode), expected 9."
         Assert-True `
-            ($valid.Output -match '"event":"content_mounted_read_only"') `
-            'Valid content was not mounted read-only.'
+            ($valid.Output -match '"event":"content_validated"') `
+            'Valid content did not complete ordinary validation.'
+        Assert-True `
+            ($valid.Output -notmatch '"event":"content_mounted_read_only"') `
+            'No-bundle title mode initialized the generated-title runtime.'
         Assert-True `
             ($valid.Output -match '"event":"title_not_implemented"') `
             'Title mode did not take the explicit not-implemented path.'
+        Assert-True `
+            ($valid.Output -match '"entry_calls":"0"') `
+            'No-bundle title mode did not prove zero entry calls.'
         Assert-True `
             (-not $valid.Output.Contains($contentRoot)) `
             'Content root leaked into structured logs.'
@@ -270,6 +281,31 @@ function Invoke-ContentTests {
         Assert-True `
             (-not $valid.Output.Contains('alpha.elf')) `
             'Private module path leaked into structured logs.'
+
+        $beta = New-ModuleRecord `
+            -Root $contentRoot `
+            -RelativePath 'beta.elf' `
+            -BaseAddress 0x30001000 `
+            -ModuleName 'public_beta'
+        Write-SyntheticManifest `
+            -Path $manifestPath `
+            -TitleId 'PCSA00107' `
+            -Modules @($alpha, $beta)
+        $wideLayout = Invoke-HostProcess -Arguments @(
+            "--content-root=$contentRoot",
+            "--manifest=$manifestPath",
+            '--renderer=dx12',
+            '--adapter=warp'
+        )
+        Assert-True `
+            ($wideLayout.ExitCode -eq 9) `
+            "No-bundle wide layout returned $($wideLayout.ExitCode), expected 9."
+        Assert-True `
+            ($wideLayout.Output -match '"event":"title_not_implemented"') `
+            'No-bundle wide layout did not take the explicit exit-9 path.'
+        Assert-True `
+            ($wideLayout.Output -notmatch '"event":"title_precondition_failed"') `
+            'No-bundle wide layout incorrectly ran generated-title gates.'
 
         [IO.File]::WriteAllBytes(
             (Join-Path $contentRoot 'alpha.elf'),

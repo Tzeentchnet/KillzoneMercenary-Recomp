@@ -9,9 +9,10 @@ explicit private root. Use content obtained and processed lawfully.
 
 | Classification | Content behavior |
 |---|---|
-| **Implemented** | Read-only ZIP inspection; isolated portable Vita3K orchestration; independent ELF/range/hash/overlap validation; deterministic private manifest generation; host-side revalidation and read-only mount |
-| **Verified** | Protected PCSA00107 archive classification; dry-run and synthetic suites; repeat byte-identical three-image manifest; real host mount with path/hash redaction |
-| **Deferred** | Static title generation provenance, title entry, and local native package assembly |
+| **Implemented** | Read-only ZIP inspection; isolated portable Vita3K orchestration; independent ELF/range/hash/overlap validation; deterministic private manifest generation; host-side revalidation/read-only mount; local generated-source provenance/staging; strict conditional title-entry boundary |
+| **Verified** | Historical protected-archive and private manifest/mount foundation evidence; public synthetic provenance, generated-bundle, retained-byte, and strict-entry tests |
+| **Privately unclosed** | No ignored local status file records a successful real generated-entry attempt |
+| **Deferred** | Startup HLE/GXM behavior and local native package assembly |
 | **Out of scope** | Key/PFS derivation or extraction, credential handling, publishing private/generated outputs, or using Vita3K in the native runtime |
 
 The accepted revisions are game
@@ -216,8 +217,27 @@ required modules have loaded. UI automation is neither required nor assumed.
 
 ## Boundary after manifest creation
 
-The manifest and runtime images remain private inputs. The host may validate
-and mount them for a renderer self-test:
+The manifest and runtime images remain private inputs. Static generation then
+uses `armrecomp emit --module-id <id>` for each module, followed by:
+
+```powershell
+armrecomp compose --entry-module <id> --output <registry.c> `
+  <module/report JSON>...
+```
+
+The local schema-v2 provenance creator binds the exact framework revision,
+generator, command token arrays, recognized environment, raw-manifest
+identity, schema-v4 module sidecars/reports, schema-v4 compose report and TLS
+layout, partitions, and generated-file inventory. Provenance-required staging
+validates all evidence before changing the stable build input. See
+[`generated-source-provenance.md`](generated-source-provenance.md).
+
+Structural report defects are rejected before entry. Fully classified named
+traps keep production readiness false but may remain entry-eligible only so the
+first trap reached becomes an explicit strict stop. This policy does not turn
+generated output into publishable material.
+
+The host may validate and mount the private inputs for a renderer self-test:
 
 ```powershell
 out\build\windows-x64-debug\Debug\kzmrecomp_host.exe `
@@ -226,7 +246,14 @@ out\build\windows-x64-debug\Debug\kzmrecomp_host.exe `
   --self-test --renderer=dx12 --adapter=warp --frames=4
 ```
 
-Without `--self-test`, the same valid input reaches the explicit
-`title_not_implemented` event and exits 9 until M2. Linking generated code
-(M1), title entry (M2), and the one-command local build (M7) are milestones
-in [`ROADMAP.md`](ROADMAP.md). Generated title output is never committed.
+Without `--self-test`, the public absent-bundle build reaches the explicit
+`title_not_implemented` event and exits 9. An opt-in provenance-validated
+local bundle may instead enter the strict host preparation path documented in
+[`NATIVE_HOST.md`](NATIVE_HOST.md). Generated title output remains private and
+must never be committed. Public presets and hosted CI leave
+`KZMRECOMP_GENERATED_SOURCE_DIR` empty and contain no private bundle.
+
+That entry path has public synthetic coverage, but it has not yet been run
+with a real local bundle. That first run is the next step of milestone M2 in
+[`ROADMAP.md`](ROADMAP.md#m2--into-title-code). The one-command local build
+is M7.

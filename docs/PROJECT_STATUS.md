@@ -3,50 +3,81 @@
 Goal: *Killzone Mercenary*, statically recompiled, running natively on
 Windows with DX12 and Vulkan at 30 fps or higher ([GOAL.md](GOAL.md)).
 
-**Current milestone: M1, lift and link** ([ROADMAP.md](ROADMAP.md#m1--lift-and-link-decompile)).
+**Current milestones: M1 (lift and link) and M2 (into title code)**
+([ROADMAP.md](ROADMAP.md)). The code path that builds a local generated
+bundle into the host and enters it exists. It has not yet been run on a
+real local bundle.
 
 | Milestone | State |
 |---|---|
 | M0 Foundation | ✅ Done (2026-10-25) |
-| M1 Lift and link | ▶ In progress |
-| M2 Into title code | Not started. The host still exits 9 (`title_not_implemented`) in title mode |
+| M1 Lift and link | ▶ Build path done. Trap ranking and symbol map open |
+| M2 Into title code | ▶ Strict entry path done. First real-bundle run pending; it needs the owner's dump on Windows |
 | M3–M7 | Not started |
 
-The game does not boot yet. No translated Killzone code has been called.
+The game does not boot yet. No translated Killzone code has run.
 
 ## What exists today
 
 | Area | State |
 |---|---|
 | Recompiler (`armrecomp`, framework) | All three post-link runtime images lift and compile with MSVC `/W4 /WX`. Coverage is 96.37% of executable bytes. 99.897% of emitted instructions are translated, with **3,770 explicit traps** left. Output is deterministic across runs |
-| Linking | Framework support exists: `armrecomp compose` builds one registry across modules, and the strict loader/binder loads and binds a module set. **The game host does not use it yet** (M1/M2) |
-| Title entry (framework) | Checked main-stack/TLS/CPU preparation and `vita_guest_call`, which reports completion, an exit request, or the first strict failure. Not yet called by the host (M2) |
+| Linking | `armrecomp compose` builds one registry across modules. `KZMRECOMP_GENERATED_SOURCE_DIR` builds a provenance-validated local bundle into the host ([generated-source-provenance.md](generated-source-provenance.md)). Empty by default and in CI |
+| Title entry | The title session loads the module set from retained bytes, binds imports, prepares stack/TLS/CPU, and calls the entry module's `module_start` once through `vita_guest_call`. Exit 0 = clean return, 11 = preparation failure, 12 = first strict failure, 13 = exit request; 9 = no bundle ([NATIVE_HOST.md](NATIVE_HOST.md)) |
+| Memory plan | Derived from the validated load ranges: a window of up to 256 MiB with heap, sysmem, kernel, main-stack, and TLS arenas. No GPU-mapped region yet |
 | Runtime/HLE (framework) | Checked memory, ARM/VFP CPU state, baton scheduler, threads and sync, allocators, libc/libm, import registry, I/O/FIOS2 (synchronous), ULT sync subset, VFS/PSARC |
 | GXM / GXP / USSE | Not started (M3). This is the largest single piece of work |
 | Display, audio, input, movies, saves | Not started (M3–M4) |
 | GPU contract and backends (framework) | Production DX12 and Vulkan backends behind one C ABI, with one HLSL source compiled by pinned DXC to DXIL and SPIR-V. Self-test verified on DX12 WARP, DX12 hardware, and Vulkan with validation |
-| Windows host (this repository) | Strict CLI, manifest/ELF validation, read-only `app0:` mount, explicit renderer selection with no fallback, and a clear/triangle self-test |
-| Content pipeline (this repository) | Archive inspector, isolated Vita3K post-link ELF dump through two patches, deterministic manifest generator, private-content guard |
+| Windows host (this repository) | Strict CLI, manifest/ELF validation, read-only `app0:` mount, explicit renderer selection with no fallback, clear/triangle self-test, title session |
+| Content pipeline (this repository) | Archive inspector, isolated Vita3K post-link ELF dump through two patches, deterministic manifest generator, provenance tools, private-content guard |
 | CI | Public, source-only Windows jobs: quality, plus Debug/RelWithDebInfo/Release build and test |
 
 ## Known blockers, in order
 
-1. The host does not build or link generated code and the composed registry
-   yet (`KZM_GENERATED_DIR`, `Build-Title.ps1`; M1).
-2. The trap census has not been triaged by boot-path reachability (M1).
-3. The title memory map is a 64 MiB placeholder that does not cover the
-   manifest load ranges (M2).
-4. The host does not call the framework's load → bind → prepare →
-   `vita_guest_call` sequence, and the import inventory has not been
-   measured at run time (M2).
-5. Guest `sceGxm`, `sceDisplay`, and the GXP/USSE shader translator are
+1. Nobody has run the entry path on a real local bundle yet (M2). That
+   needs the owner's dump on a Windows machine. The first strict failure
+   it reports is the next task.
+2. The trap census has not been ranked by boot-path reachability, and
+   there is no symbol map for naming failures (M1).
+3. Only the entry module's `module_start` runs; the other modules are not
+   started first (M2).
+4. Guest `sceGxm`, `sceDisplay`, and the GXP/USSE shader translator are
    missing (M3).
+5. The framework's Windows quality gate fails on any C/C++ change, and the
+   framework does not build on Linux. Fixes are parked in
+   [`patches/vitarecomp`](../patches/vitarecomp/README.md) until someone with
+   push access lands them in the fork.
 
 Performance risks to watch, which are addressed in M6 if they bite:
 
 - every guest memory access is a checked function call;
 - indirect dispatch is a binary search; and
 - the scheduler runs one guest thread at a time.
+
+## Title-entry validation
+
+The public, synthetic test selections for the title-entry path (the work
+earlier docs call "Gate 1") passed 6/6 (framework) and 5/5 (game/host) on
+2026-10-25:
+
+```powershell
+ctest --test-dir out\build\vitarecomp-public-debug -C Debug `
+  --output-on-failure `
+  -R "^(emit|compose-generated-image-set|runtime|entry-state|loader-strict|module-set-binding)$"
+
+ctest --test-dir out\build\windows-x64-debug -C Debug `
+  --output-on-failure `
+  -R ("^(generated-provenance-synthetic|" +
+      "generated-bundle-build-synthetic|" +
+      "generated-bundle-adapter-unit|title-session-unit|" +
+      "native-host-unit)$")
+```
+
+They cover composition, structural blockers, provenance and staging
+failures, retained bytes, every preparation stage (zero entry calls on
+failure), one-use entry, clean return, explicit exit, and first strict
+failure. All inputs were public or synthetic.
 
 ## Revisions
 
@@ -63,11 +94,12 @@ Performance risks to watch, which are addressed in M6 if they bite:
 Add one short entry per meaningful step: what now works, and the measured
 number if there is one. Do not write separate verification reports.
 
-- **2026-10-26:** Framework pin moved to `0e81bb4`, which adds module
-  composition, the strict loader/binder, entry-state preparation, and
-  `vita_guest_call`. M1/M2 framework items are ticked in the roadmap.
-  Wrote two framework fixes that could not be pushed to the fork from this
-  session (no GitHub access), so they are parked in
+- **2026-10-26:** Merged `main`'s strict title-entry work into the refocused
+  docs. The roadmap now ticks the generated-bundle build, the memory plan
+  from load ranges, and the host's load → bind → prepare →
+  `vita_guest_call` path. The first real-bundle run is the next step.
+- **2026-10-26:** Wrote two framework fixes that could not be pushed to the
+  fork from this session (no GitHub access), so they are parked in
   [`patches/vitarecomp`](../patches/vitarecomp/README.md). One makes the
   build warnings-clean on Linux clang/GCC (19/19 tests), and it also fixes
   NID names over 63 bytes being truncated into wrong HLE symbols, and
@@ -76,6 +108,8 @@ number if there is one. Do not write separate verification reports.
 - **2026-10-26:** Docs and plans refocused on the boot-to-30 fps goal. Added
   [GOAL.md](GOAL.md), rewrote the roadmap into game-facing milestones M0–M7,
   and added agent working rules in [`CLAUDE.md`](../CLAUDE.md).
+- **2026-10-25:** Strict title-entry path implemented (framework `0e81bb4`,
+  game `17046af`), with public synthetic coverage.
 - **2026-10-25:** M0 accepted. The full matrix and redacted private
   measurements are in [FOUNDATION_VERIFICATION.md](FOUNDATION_VERIFICATION.md)
   (historical record).

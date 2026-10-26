@@ -52,7 +52,7 @@ Framework repository:
 ## Foundation-checkpoint reconciliation
 
 The migration is reconciled through framework
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`, which is also the exact game
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b`, which is also the exact game
 gitlink and `config/framework.commit` value. The accepted game verification
 report is `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
 
@@ -64,7 +64,8 @@ report is `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
 | Aligned-PC `TBB`/`TBH` | Executing in canonical discovery/emission regressions |
 | Lane-aware `VST1` and FPSCR flush-to-zero comparison | Executing in canonical emitter/runtime regressions |
 | Exclusive reservation invalidation by ordinary writes | Executing in a cross-thread runtime regression |
-| Deterministic multi-image ordering and overlap | Executing in the game manifest/host layer; framework generation-report composition remains deferred |
+| Deterministic multi-image ordering and overlap | Executing in the game manifest/host layer and framework `armrecomp compose`, with public collision/order/readiness tests |
+| Versioned generated-module entry boundary | ABI-v1 descriptors, strict loader/binder, checked stack/TLS/CPU state, and one-use guest-call behavior are publicly/synthetically verified |
 | Full external-oracle state adapter | Optional and deferred; not a production dependency |
 
 The canonical framework also contains the standalone runtime/HLE and shared
@@ -74,10 +75,16 @@ runtime, generated title code, or an embedded Vita3K.
 
 Current framework records:
 
-- [CPU baseline](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/CPU_BASELINE.md)
-- [Runtime/HLE](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/HLE.md)
-- [GPU contract](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/GPU.md)
-- [Provenance](https://github.com/Tzeentchnet/vitarecomp/blob/f3408e1ea73b724c7ba3a644633938c220f2cc2a/docs/PROVENANCE.md)
+- [CPU baseline](third_party/vitarecomp/docs/CPU_BASELINE.md)
+- [Runtime/HLE](third_party/vitarecomp/docs/HLE.md)
+- [Entry state](third_party/vitarecomp/docs/ENTRY_STATE.md)
+- [GPU contract](third_party/vitarecomp/docs/GPU.md)
+- [Provenance](third_party/vitarecomp/docs/PROVENANCE.md)
+
+The foundation revisions and results above remain historical. Gate 1 is
+implemented and publicly/synthetically verified but remains privately
+unclosed; no ignored local status file records successful private real-entry
+evidence. This is not a bootability or playability claim.
 
 Clean-clone acceptance and redacted private measurements are in
 [`docs/FOUNDATION_VERIFICATION.md`](docs/FOUNDATION_VERIFICATION.md). Public CI

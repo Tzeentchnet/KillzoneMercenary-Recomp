@@ -14,6 +14,8 @@
     The source is fully enumerated, hashed, and checked for required files
     before the target is modified. Source and target must be explicit,
     non-overlapping paths; this script has no machine-specific defaults.
+    The optional provenance parameter set validates Gate 1 provenance before
+    any target modification. Omitting it preserves the legacy staging mode.
 
 .PARAMETER SourceDir
     An immutable generator-output directory.
@@ -24,13 +26,28 @@
 .PARAMETER RequiredFile
     Optional source-relative paths that must exist before synchronization.
 
+.PARAMETER RequiredProvenance
+    Opt-in source-relative provenance file. When supplied, RuntimeManifest is
+    also mandatory and the provenance validator must accept the complete
+    source inventory before staging starts.
+
+.PARAMETER RuntimeManifest
+    Raw runtime manifest used to revalidate RequiredProvenance.
+
 .EXAMPLE
     .\tools\generated\Stage-GeneratedSources.ps1 `
         -SourceDir .\out\generated-v2 `
         -TargetDir .\out\generated-stable `
         -RequiredFile generated_registry.c
+
+.EXAMPLE
+    .\tools\generated\Stage-GeneratedSources.ps1 `
+        -SourceDir .\out\generated-v2 `
+        -TargetDir .\out\generated-stable `
+        -RequiredProvenance .generated-source-provenance.json `
+        -RuntimeManifest .\config\local\runtime-manifest.json
 #>
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Legacy')]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [string] $SourceDir,
@@ -38,7 +55,14 @@ param(
     [Parameter(Mandatory = $true, Position = 1)]
     [string] $TargetDir,
 
-    [string[]] $RequiredFile = @()
+    [string[]] $RequiredFile = @(),
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Provenance')]
+    [Alias('ProvenanceFile', 'RequiredProvenanceFile')]
+    [string] $RequiredProvenance,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Provenance')]
+    [string] $RuntimeManifest
 )
 
 Set-StrictMode -Version Latest
@@ -91,13 +115,19 @@ function ConvertTo-SafeRelativePath {
     $normalized = $Path.Trim().Replace('\', '/')
     if (
         [string]::IsNullOrWhiteSpace($normalized) -or
+        $normalized.Contains(':') -or
+        $normalized.Contains('//') -or
         [IO.Path]::IsPathRooted($normalized) -or
+        $normalized -eq '.' -or
+        $normalized.StartsWith('./', [StringComparison]::Ordinal) -or
+        $normalized.Contains('/./') -or
+        $normalized.EndsWith('/.', [StringComparison]::Ordinal) -or
         $normalized -eq '..' -or
         $normalized.StartsWith('../', [StringComparison]::Ordinal) -or
         $normalized.Contains('/../') -or
         $normalized.EndsWith('/..', [StringComparison]::Ordinal)
     ) {
-        throw "Unsafe source-relative path '$Path'."
+        throw 'Generated-source staging: unsafe source-relative path.'
     }
 
     return $normalized
@@ -120,7 +150,7 @@ function Write-Utf8NoBom {
 }
 
 if (-not (Test-Path -LiteralPath $SourceDir -PathType Container)) {
-    throw "Generated-source staging: source '$SourceDir' does not exist or is not a directory."
+    throw 'Generated-source staging: source does not exist or is not a directory.'
 }
 
 $source = Get-NormalizedFullPath -Path (Resolve-Path -LiteralPath $SourceDir).ProviderPath
@@ -135,25 +165,32 @@ if (
 
 $sourceFiles = @(
     Get-ChildItem -LiteralPath $source -File -Recurse -Force |
-        Where-Object { $_.Name -cne $manifestName } |
-        Sort-Object @{ Expression = { Get-RelativePath -Root $source -Path $_.FullName } }
+        Where-Object { $_.Name -cne $manifestName }
 )
 if ($sourceFiles.Count -eq 0) {
-    throw "Generated-source staging: source '$source' is empty."
+    throw 'Generated-source staging: source is empty.'
 }
 
 $entries = New-Object System.Collections.Generic.List[object]
 $sourcePaths = New-Object 'System.Collections.Generic.HashSet[string]' (
     [StringComparer]::OrdinalIgnoreCase
 )
+$sourceByPath = New-Object (
+    'System.Collections.Generic.Dictionary[string, System.IO.FileInfo]'
+) ([StringComparer]::Ordinal)
 foreach ($file in $sourceFiles) {
     $relative = ConvertTo-SafeRelativePath (
         Get-RelativePath -Root $source -Path $file.FullName
     )
     if (-not $sourcePaths.Add($relative)) {
-        throw "Generated-source staging: source contains a case-colliding path '$relative'."
+        throw 'Generated-source staging: source contains case-colliding paths.'
     }
-
+    $sourceByPath.Add($relative, $file)
+}
+$sortedSourcePaths = [string[]] @($sourceByPath.Keys)
+[Array]::Sort($sortedSourcePaths, [StringComparer]::Ordinal)
+foreach ($relative in $sortedSourcePaths) {
+    $file = $sourceByPath[$relative]
     $entries.Add([pscustomobject][ordered]@{
         path = $relative
         sha256 = Get-Sha256 -Path $file.FullName
@@ -164,23 +201,46 @@ foreach ($file in $sourceFiles) {
 foreach ($required in $RequiredFile) {
     $requiredPath = ConvertTo-SafeRelativePath -Path $required
     if (-not $sourcePaths.Contains($requiredPath)) {
-        throw (
-            "Generated-source staging: source '$source' is missing required " +
-            "file '$requiredPath'; target was not modified."
-        )
+        throw 'Generated-source staging: a required file is missing; target was not modified.'
     }
 }
 
+$provenancePath = $null
+if ($PSCmdlet.ParameterSetName -ceq 'Provenance') {
+    $provenancePath = ConvertTo-SafeRelativePath -Path $RequiredProvenance
+    if ($RequiredProvenance -cne $provenancePath -or
+        -not $sourcePaths.Contains($provenancePath)) {
+        throw (
+            'Generated-source staging: required provenance is missing or ' +
+            'not a normalized forward-slash source-relative path; target ' +
+            'was not modified.'
+        )
+    }
+    $validator = Join-Path $PSScriptRoot 'Test-GeneratedSourceProvenance.ps1'
+    & $validator `
+        -ProvenanceFile (
+            Join-Path $source $provenancePath.Replace('/', '\')
+        ) `
+        -SourceRoot $source `
+        -RuntimeManifest $RuntimeManifest `
+        -RepositoryRoot ([IO.Path]::GetFullPath(
+            (Join-Path $PSScriptRoot '..\..')
+        )) `
+        -Quiet
+}
+
+$targetExists = Test-Path -LiteralPath $target
 if (Test-Path -LiteralPath $target) {
     if (-not (Test-Path -LiteralPath $target -PathType Container)) {
-        throw "Generated-source staging: target '$target' exists and is not a directory."
+        throw 'Generated-source staging: target exists and is not a directory.'
     }
-} else {
-    New-Item -ItemType Directory -Path $target | Out-Null
 }
 
 $manifestPath = Join-Path $target $manifestName
 $previousPaths = New-Object System.Collections.Generic.List[string]
+$previousPathSet = New-Object 'System.Collections.Generic.HashSet[string]' (
+    [StringComparer]::OrdinalIgnoreCase
+)
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     try {
         $previous = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
@@ -188,10 +248,15 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
             throw "unsupported schema version '$($previous.schemaVersion)'"
         }
         foreach ($entry in @($previous.files)) {
-            $previousPaths.Add((ConvertTo-SafeRelativePath -Path ([string] $entry.path)))
+            $previousPath = ConvertTo-SafeRelativePath -Path ([string] $entry.path)
+            if ($previousPath -ceq $manifestName -or
+                -not $previousPathSet.Add($previousPath)) {
+                throw 'duplicate or reserved managed path'
+            }
+            $previousPaths.Add($previousPath)
         }
     } catch {
-        throw "Generated-source staging: invalid target manifest '$manifestPath': $($_.Exception.Message)"
+        throw 'Generated-source staging: invalid target manifest; target was not modified.'
     }
 }
 
@@ -199,8 +264,12 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
 foreach ($entry in $entries) {
     $destination = Join-Path $target ($entry.path.Replace('/', '\'))
     if (Test-Path -LiteralPath $destination -PathType Container) {
-        throw "Generated-source staging: destination '$destination' is a directory."
+        throw 'Generated-source staging: a managed destination is a directory.'
     }
+}
+
+if (-not $targetExists) {
+    New-Item -ItemType Directory -Path $target | Out-Null
 }
 
 $copied = 0
@@ -216,16 +285,16 @@ foreach ($entry in $entries) {
         (Test-Path -LiteralPath $destination -PathType Leaf) -and
         (Get-Sha256 -Path $destination) -ceq $entry.sha256
     ) {
-        Write-Verbose "unchanged: $($entry.path)"
+        Write-Verbose 'A managed file is unchanged.'
         $unchanged++
         continue
     }
 
-    Write-Verbose "copying: $($entry.path)"
+    Write-Verbose 'Copying a changed managed file.'
     Copy-Item -LiteralPath $entry.source -Destination $destination -Force
     (Get-Item -LiteralPath $destination).LastWriteTimeUtc = [DateTime]::UtcNow
     if ((Get-Sha256 -Path $destination) -cne $entry.sha256) {
-        throw "Generated-source staging: copy verification failed for '$($entry.path)'."
+        throw 'Generated-source staging: copy verification failed.'
     }
     $copied++
 }
@@ -238,7 +307,7 @@ foreach ($relative in $previousPaths) {
 
     $stalePath = Join-Path $target ($relative.Replace('/', '\'))
     if (Test-Path -LiteralPath $stalePath -PathType Leaf) {
-        Write-Verbose "removing stale managed file: $relative"
+        Write-Verbose 'Removing a stale managed file.'
         Remove-Item -LiteralPath $stalePath -Force
         $removed++
     }
@@ -268,5 +337,5 @@ if ($oldManifestText -cne $manifestText) {
 
 Write-Host (
     "Generated-source staging: $copied copied, $unchanged unchanged, " +
-    "$removed stale managed file(s) removed. Target: $target"
+    "$removed stale managed file(s) removed."
 )

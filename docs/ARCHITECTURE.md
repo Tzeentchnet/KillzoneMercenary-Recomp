@@ -6,8 +6,10 @@ together: what exists at the framework pin
 go on the way to the goal in [GOAL.md](GOAL.md). Milestone order is in
 [ROADMAP.md](ROADMAP.md).
 
-At M0, title mode deliberately exits with code 9 before calling generated
-code. M2 replaces that boundary with the real boot sequence.
+The host can already prepare and enter a locally generated bundle through a
+strict, one-call boundary (see [Native host](#native-host)). That path has
+public synthetic coverage but has not yet been run on a real local bundle.
+Public builds contain no bundle and exit 9 in title mode.
 
 ## Repository and process boundaries
 
@@ -28,7 +30,8 @@ lawfully obtained archive
   -> external patched Vita3K, run separately
   -> private post-link ELF32/ARM runtime images
   -> independent deterministic manifest validation
-  -> armrecomp static discovery and generated C (ignored local output)
+  -> armrecomp emit + compose (ignored local generated C and reports)
+  -> local provenance validation and content-aware ignored staging
   -> native compiler and standalone vitarecomp runtime/HLE
   -> game-owned Win32 host
   -> shared GPU contract
@@ -42,10 +45,38 @@ applies the supported Vita relocation model, emits bounded deterministic C
 partitions, and produces explicit unsupported/trap reports. The production
 host has no interpreter, JIT, Dynarmic, or emulator fallback.
 
+Generated-module ABI v4 starts every descriptor with `abi_version` and
+`struct_size`, then carries its stable module identity, complete dispatch,
+raw entry address plus normalized Thumb dispatch key, TLS, site-keyed function
+imports with writable direct-call targets, import/export variables, and a
+schema-v4 report summary. TLS-bearing descriptors carry explicit power-of-two
+alignment.
+TLS-variable import tables remain unsupported and are rejected by both
+generation and host preflight. They are never silently omitted from the strict
+metadata contract.
+The compose command consumes exactly one sidecar/report pair per module, sorts
+the set deterministically, and emits a registry plus schema-v4 aggregate
+reports with TLS descriptor index/order, aligned offset, and aggregate
+size/alignment:
+
+```powershell
+armrecomp compose --entry-module <id> --output <registry.c> `
+  <module/report JSON>...
+```
+
+Aggregate structural readiness and entry eligibility require complete
+metadata, resolved entry/TLS records, function-entry and PC instrumentation,
+and no body cuts, unreported partitions, or unclassified traps. Fully
+classified named traps keep production readiness false but remain eligible to
+become the first strict runtime stop. The local provenance validator enforces
+that policy before staging or compilation.
+
 The accepted private three-image baseline generated 809 byte-identical files
 across two runs; all 800 generated C translation units compiled with MSVC
 warnings as errors. Its 3,770 explicit trapped instruction instances remain a
-readiness signal. They are not permission to enter title code.
+readiness signal. They are generation evidence, not evidence of a real
+entry run. If a configured entry reaches one, the first named trap stops
+the guest call and is reported as a strict failure.
 
 ### Standalone runtime and HLE
 
@@ -67,9 +98,41 @@ runtime/VFS creation, renderer selection, and deterministic teardown. A valid
 external image set is mounted read-only as `app0:` only after path, range,
 metadata, size, and hash checks pass.
 
-At M0 the only successful execution mode is the public clear/triangle
-self-test. Valid title content without `--self-test` reaches the explicit
-`title_not_implemented` boundary and exits 9 until M2.
+The public clear/triangle self-test is the only execution mode that needs no
+private input. Without a configured generated bundle, valid title content
+reaches the explicit `title_not_implemented` boundary and exits 9.
+
+For title preparation, validated load ranges feed an explicit bounded-window
+policy in `src/game/title_config.*`. The deterministic plan places disjoint
+heap, sysmem, kernel, main-stack, and TLS arenas after the load set and rejects
+overlap, alignment, address-overflow, and maximum-window violations. The
+framework receives the planned TLS range as a dedicated allocator arena;
+main and worker TLS blocks never fall back to the kernel arena. The public
+renderer self-test continues to use its fixed synthetic scaffold, so
+title-derived addresses cannot change that test contract.
+
+Validation retains every ordered module's metadata and immutable bytes from
+the same locked handle used for hashing. A configured bundle must agree with
+the raw-manifest identity and then pass strict in-memory module-set
+preflight/load, relocation and module-table extension checks, generated
+descriptor/global-dispatch agreement, complete binding, stack, TLS, and CPU
+state preparation. The full order is content identity, memory layout, runtime
+initialization, content mount, module preflight, transactional module load,
+descriptor/dispatch agreement, complete binding, stack, TLS template
+preparation, CPU state, and checked main-thread TLS materialization.
+Only the resulting move-only capability can issue one `vita_guest_call`.
+
+That boundary reports clean return as exit 0, a preparation or boundary
+failure as exit 11, the first strict failure as exit 12, and an explicit guest
+exit request as exit 13. No-bundle title mode still mounts read-only and exits
+9. Since strict loading consumes the retained buffers and never reopens module
+paths, there is no validation-to-load path race.
+
+The relocation extension delegates to the framework's shared PT_SCE_RELA
+decoder. Preflight accepts the relocation bit only after every record decodes,
+every patch is supported and inside declared file bytes, and applying the
+identity-load relocation would change no byte. It never repairs the retained
+image. Static ET_SCE_EXEC modules need no relocation stream.
 
 ### Shared GPU contract
 
@@ -120,34 +183,40 @@ Design points that the 30 fps target depends on (M6, prepared from M2):
 - **Pacing:** `sceDisplay` flips map to present with vblank-equivalent
   timing, so game logic sees the cadence it expects.
 
-## Status at the M0 checkpoint
+## Status
 
 | Classification | Behavior |
 |---|---|
-| **Implemented** | Offline static CPU pipeline; standalone runtime/HLE foundation; read-only VFS; versioned GPU ABI; production DX12/Vulkan backends; Win32 host; content inspection, dump, and manifest tools; safety guards |
-| **Verified** | Clean-clone quality/build matrix; 73/73 CTest executions; public homebrew E2E; deterministic private generation; three-module host validation/mount; DX12 WARP/hardware and validation-enabled Vulkan self-tests; explicit no-fallback negative paths |
-| **Next (M1–M7)** | Linking generated code; title entry; startup imports; guest GXM; GXP/USSE; title frames on both backends; audio/input/save/movie; gameplay; 30 fps performance; one-command local build |
+| **Implemented** | Offline static CPU pipeline; versioned generated-module ABI/composition and local provenance; standalone runtime/HLE foundation; read-only VFS; strict conditional title preparation/entry; versioned GPU ABI; production DX12/Vulkan backends; Win32 host; content inspection, dump, and manifest tools; safety guards |
+| **Verified** | Historical clean-clone foundation matrix; public homebrew E2E; deterministic private generation; public/synthetic ABI composition, provenance, retained-content, preparation, and generated-bundle outcome tests; DX12 WARP/hardware and validation-enabled Vulkan self-tests; explicit no-fallback negative paths |
+| **Next (M1–M7)** | First real-bundle entry run; trap ranking and symbol map; startup imports; guest GXM; GXP/USSE; title frames on both backends; audio/input/save/movie; gameplay; 30 fps performance; one-command local build |
 | **Intentionally out of scope** | PFS/key derivation or extraction; distributing private content/generated title code; embedded Vita3K or other emulator; a Vita3K fork or Vita3K feature work; runtime JIT/interpreter fallback; silent unsupported behavior; automatic renderer fallback; online play |
 
 ## Test and CI layers
 
 1. **Framework unit/contract tests:** container, decoder, discovery, emitter,
-   CPU/runtime/HLE, strict dispatch, C GPU ABI, and backend contracts.
+   composition, strict loader/binder, entry state, CPU/runtime/HLE, strict
+   dispatch, C GPU ABI, and backend contracts.
 2. **Public end-to-end fixtures:** three reviewed homebrew modules are
    extracted, emitted twice, byte-compared, and compiled.
 3. **Game synthetic tests:** CLI, manifest, redaction, content pipeline,
-   generated staging, guards, VFS, title boundary, and failure paths.
+   generated staging/bundle provenance, retained bytes, strict title entry,
+   guards, VFS, and failure paths.
 4. **Renderer integration:** DX12 WARP is required; hardware DX12 and
    validation-enabled Vulkan run when available; invalid selections must fail
    without fallback.
-5. **Private acceptance:** only ignored local inputs/outputs are used; public
-   reporting is aggregate and redacted.
+5. **Private foundation acceptance:** only ignored local inputs/outputs were
+   used and public reporting is aggregate/redacted. No real-bundle entry run
+   is recorded yet.
 6. **Hosted CI:** public-source-only quality plus Debug/RelWithDebInfo/Release
-   game builds and Debug/Release framework builds.
+   game builds and Debug/Release framework builds. The generated-source cache
+   path stays empty; CI receives no private bundle.
 
-The accepted evidence is in
-[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md). The corresponding
-public runs are framework
+Historical accepted evidence is in
+[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md). Current
+title-entry test commands and results are in
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md#title-entry-validation).
+The historical public runs are framework
 [40185631954](https://github.com/Tzeentchnet/vitarecomp/actions/runs/40185631954),
 game foundation
 [40186098886](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40186098886),
@@ -166,14 +235,16 @@ and game report
 - During bring-up, an import may be a *named stub*: registered, logged on
   first call, and listed as `stubbed` in the import inventory. A silent
   success is never allowed. See the [roadmap working rules](ROADMAP.md#working-rules).
+- A generated title entry stays unreachable unless every host preparation
+  stage succeeds.
 
 ## Framework references
 
-- [Pipeline architecture](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/ARCHITECTURE.md)
-- [CPU baseline](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/CPU_BASELINE.md)
-- [Runtime and HLE](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/HLE.md)
-- [Entry state and TLS](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/ENTRY_STATE.md)
-- [GPU contract and Vulkan](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/GPU.md)
-- [Direct3D 12](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/DX12.md)
-- [Provenance](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/PROVENANCE.md)
-- [Framework quality gates](https://github.com/Tzeentchnet/vitarecomp/blob/0e81bb4b275435b2396b01a88c8d767d0104cc8b/docs/QUALITY_GATES.md)
+- [Pipeline architecture](../third_party/vitarecomp/docs/ARCHITECTURE.md)
+- [CPU baseline](../third_party/vitarecomp/docs/CPU_BASELINE.md)
+- [Runtime and HLE](../third_party/vitarecomp/docs/HLE.md)
+- [Entry state](../third_party/vitarecomp/docs/ENTRY_STATE.md)
+- [GPU contract and Vulkan](../third_party/vitarecomp/docs/GPU.md)
+- [Direct3D 12](../third_party/vitarecomp/docs/DX12.md)
+- [Provenance](../third_party/vitarecomp/docs/PROVENANCE.md)
+- [Framework quality gates](../third_party/vitarecomp/docs/QUALITY_GATES.md)

@@ -52,15 +52,31 @@ def assert_rejected(
 def tracked_json_files() -> list[pathlib.Path]:
     completed = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "*.json"],
-        check=True,
+        check=False,
         capture_output=True,
         encoding="utf-8",
     )
-    return [
-        ROOT / line
-        for line in completed.stdout.splitlines()
-        if line and not line.startswith("third_party/")
-    ]
+    if completed.returncode == 0:
+        tracked = [
+            ROOT / line
+            for line in completed.stdout.splitlines()
+            if line and not line.startswith("third_party/")
+        ]
+        public_config = list((ROOT / "config").glob("*.schema.json"))
+        public_config += list((ROOT / "config").glob("*.example.json"))
+        return sorted(set(tracked + public_config))
+
+    excluded = {
+        ".git",
+        "build",
+        "out",
+        "third_party",
+    }
+    return sorted(
+        path
+        for path in ROOT.rglob("*.json")
+        if not any(part in excluded for part in path.relative_to(ROOT).parts)
+    )
 
 
 def main() -> int:
@@ -75,6 +91,10 @@ def main() -> int:
         (
             "config/runtime-manifest.schema.json",
             "config/runtime-manifest.example.json",
+        ),
+        (
+            "config/generated-source-provenance.schema.json",
+            "config/generated-source-provenance.example.json",
         ),
     )
     validators: dict[str, Draft202012Validator] = {}
@@ -106,6 +126,34 @@ def main() -> int:
         validators["config/runtime-manifest.schema.json"],
         bad_manifest,
         "runtime-manifest private extension",
+    )
+
+    provenance_name = "config/generated-source-provenance.example.json"
+    provenance_schema = validators[
+        "config/generated-source-provenance.schema.json"
+    ]
+    bad_provenance = copy.deepcopy(loaded[provenance_name])
+    bad_provenance["generatedFiles"][0]["path"] = "../registry.c"
+    assert_rejected(
+        provenance_schema,
+        bad_provenance,
+        "generated-source provenance path traversal",
+    )
+    bad_provenance = copy.deepcopy(loaded[provenance_name])
+    bad_provenance["generator"]["commands"][0]["arguments"][3] = (
+        "C:/synthetic/module.elf"
+    )
+    assert_rejected(
+        provenance_schema,
+        bad_provenance,
+        "generated-source provenance absolute command path",
+    )
+    bad_provenance = copy.deepcopy(loaded[provenance_name])
+    bad_provenance["privateExtension"] = True
+    assert_rejected(
+        provenance_schema,
+        bad_provenance,
+        "generated-source provenance private extension",
     )
 
     inventory = [

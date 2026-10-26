@@ -31,16 +31,20 @@ oracle, and reference. It is not forked, extended, linked, or shipped.
 
 ## Current status
 
-**M0 foundation done. M1 (lift and link) is in progress.** The game does not
-boot yet.
+**M0 foundation done. M1 (lift and link) and M2 (into title code) are in
+progress.** The game does not boot yet.
 
 - All three runtime images lift to C that compiles cleanly: 96.37% of
   executable bytes covered, 99.897% of emitted instructions translated,
   3,770 explicit traps left.
 - The host, the content validation, and both renderer backends work, using a
   self-test scene.
-- Next: link the generated code into the host and enter title code (M2).
-  Title mode currently exits 9 (`title_not_implemented`).
+- An opt-in local generated bundle (`KZMRECOMP_GENERATED_SOURCE_DIR`) builds
+  into the host, which can load, bind, and enter it through one strict
+  `vita_guest_call`. Public builds have no bundle and exit 9
+  (`title_not_implemented`) in title mode.
+- Next: the first run on a real local bundle, then fix the first strict
+  failure it reports (M2).
 
 This repository contains no game data, generated title code, firmware, keys,
 or playable build.
@@ -96,6 +100,11 @@ provided. More details are in [docs/BUILDING.md](docs/BUILDING.md), including
 the exact clean-clone verification commands and public-only
 [quality gates](docs/QUALITY_GATES.md).
 
+The generated-bundle opt-in is intentionally absent from every preset. Local
+users must provide both an explicit validated staging directory and its bound
+raw runtime manifest; hosted CI never supplies, uploads, caches, or builds a
+private bundle.
+
 ## Native host
 
 The bounded renderer smoke path needs no private content:
@@ -110,7 +119,7 @@ Supported options are `--content-root`, `--manifest`,
 `--self-test`, `--frames`, and `--help`. Renderer selection never falls back.
 Paths and content hashes are redacted from structured logs. See
 [docs/NATIVE_HOST.md](docs/NATIVE_HOST.md) for manifest rules, exit codes, and
-the title-execution boundary.
+the strict conditional title-execution boundary.
 
 Vulkan can be selected just as explicitly:
 
@@ -128,12 +137,18 @@ emulator/JIT.
 
 - [Architecture](docs/ARCHITECTURE.md): process boundaries, pipeline, and
   the target runtime design
+- [Native host](docs/NATIVE_HOST.md): options, exit codes, and the strict
+  title-entry path
+- [Generated-source provenance](docs/generated-source-provenance.md): how a
+  local generated bundle is validated and staged
 - [Research record](docs/research/README.md): curated CPU/loader findings
   and asset-format facts from earlier work
 - [Generated-source staging](tools/generated/Stage-GeneratedSources.ps1)
   and its [synthetic regression](tests/Test-StageGeneratedSources.ps1)
 - [Vita3K patch series](patches/vita3k/README.md): the frozen two-patch
   post-link ELF dump for an external checkout
+- [Pending framework patches](patches/vitarecomp/README.md): fixes waiting
+  to land in the framework fork
 - Historical records: [migration manifest](MIGRATION.md) and
   [M0 verification](docs/FOUNDATION_VERIFICATION.md)
 
@@ -164,6 +179,9 @@ can be listed in ignored `config/private-roots.txt` or in the
 Windows). The guard complements review; it is not a legal-content detector.
 
 ## M0 evidence
+
+Title-entry test commands and results are in
+[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md#title-entry-validation).
 
 The accepted M0 checkpoint used framework
 `f3408e1ea73b724c7ba3a644633938c220f2cc2a` and game report revision

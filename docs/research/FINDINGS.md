@@ -60,10 +60,14 @@ sizes, and hashes. The host independently validates those facts before mount.
   executable image; a seed outside all images or inside more than one image is
   an input error.
 
-**Current integration:** The game manifest builder now deterministically sorts
+**Current integration:** The game manifest builder deterministically sorts
 multiple runtime images and rejects intra-/cross-image overlap. Framework
-`armrecomp` still emits one image at a time; composition of its per-image
-generation reports remains deferred.
+`armrecomp emit --module-id <id>` emits one namespaced module at a time, and
+`armrecomp compose` validates and combines the complete set into a
+deterministic registry and aggregate report. Public synthetic tests prove
+input-order independence, collision rejection, exact entry resolution, and
+structural pre-entry blocking. The exact command is documented in
+[`generated-source-provenance.md`](../generated-source-provenance.md).
 
 ## ARM/Thumb and control flow
 

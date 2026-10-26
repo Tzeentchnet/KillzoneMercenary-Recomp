@@ -8,13 +8,16 @@ behavior of the real game, not on reports.
 | Milestone | Outcome | State |
 |---|---|---|
 | [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
-| [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current** |
-| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | Next |
+| [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: strict entry path done, first real-bundle run pending |
 | [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
 | [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
 | [M5](#m5--first-mission) | Mission 1 playable start to finish | |
 | [M6](#m6--30-fps) | 30 fps or higher, p95, on both backends | |
 | [M7](#m7--full-campaign) | Full campaign plus a one-command local build | |
+
+Earlier documents call the strict title-entry work "Gate 1". In this
+roadmap, that work is the M1 build path plus the first M2 tasks.
 
 M6 is listed after M5 because optimization needs correct behavior to
 measure. Performance is still designed in from M2: see
@@ -85,13 +88,14 @@ Tasks:
 - [x] **Framework:** compose multi-image output into one dispatch registry
       and generation report (`armrecomp compose`, generated-module ABI,
       framework `0e81bb4`, now pinned).
-- [ ] **Game:** add a `KZM_GENERATED_DIR` CMake option. It compiles the
-      staged generated C plus the composed registry (`/bigobj`) and links
-      them into the host. The option is off by default, and CI never sets
-      it.
-- [ ] **Game:** add `tools/build/Build-Title.ps1`. It chains manifest
+- [x] **Game:** the `KZMRECOMP_GENERATED_SOURCE_DIR` CMake option builds a
+      provenance-validated generated bundle (generated C plus the composed
+      registry) into the host. It is empty by default, and CI never sets
+      it. See [generated-source-provenance.md](generated-source-provenance.md).
+- [ ] **Game:** one local command that chains the existing steps: manifest
       validation, `armrecomp emit` per image, `armrecomp compose`,
-      `Stage-GeneratedSources.ps1`, configure, and build.
+      `New-GeneratedSourceProvenance.ps1`, provenance-required staging,
+      configure, and build.
 - [ ] **Framework:** rank the trap census by reachability from the module
       entries (compose already classifies traps by kind), then fix the
       largest NEON/VFP, branch-target, and transfer-shape classes on the
@@ -117,8 +121,9 @@ display/GXM calls.
 
 Exit criteria:
 
-1. The `title_not_implemented` exit-9 boundary is replaced by the real boot
-   sequence.
+1. With a local generated bundle, title mode runs the real boot sequence.
+   Exit 9 (`title_not_implemented`) remains only for public builds, which
+   have no bundle.
 2. Three consecutive clean runs reach the frame loop. That means at least 60
    iterations of the game's display flip or `sceGxmBeginScene` calls, with
    no trap.
@@ -130,21 +135,31 @@ Exit criteria:
 
 Tasks:
 
-- [ ] **Game:** replace the 64 MiB scaffold in `src/game/title_config.cpp`
-      with the real title memory map. It covers every manifest load range
-      plus stacks, heaps, kernel objects, and GPU-mapped (CDRAM-equivalent)
-      memory.
+- [x] **Game:** derive the title memory plan from the validated load
+      ranges, with disjoint heap, sysmem, kernel, main-stack, and TLS arenas
+      (`src/game/title_config.*`).
+- [ ] **Game:** add GPU-mapped (CDRAM-equivalent) memory to that plan, and
+      check whether its 256 MiB window cap fits the game's real allocations.
 - [x] **Framework:** strict module-set preflight/load, export/import
       binding by NID, checked main-stack/TLS/CPU entry preparation, and the
       `vita_guest_call` boundary that reports completion, an exit request,
       or the first strict failure (framework `0e81bb4`; see its
       `docs/ENTRY_STATE.md`).
-- [ ] **Game:** wire the host to those APIs. Load the composed module set
-      at its recorded addresses, bind imports, prepare stack/TLS/CPU, then
-      run `module_start` for each module in dependency order before the
-      eboot entry, each through `vita_guest_call`. Take the order from the
-      oracle's module-load log. Print the first strict failure with its
-      symbol name.
+- [x] **Game:** wire the host to those APIs. The title session loads the
+      composed module set from retained bytes, binds imports, prepares
+      stack/TLS/CPU, and calls the entry module's `module_start` once
+      through `vita_guest_call`. Exit codes: 0 clean return, 11
+      preparation failure, 12 first strict failure, 13 exit request
+      ([NATIVE_HOST.md](NATIVE_HOST.md)).
+- [ ] **Run it (needs the owner's dump on Windows):** do the first
+      real-bundle entry run and record its outcome in
+      [PROJECT_STATUS.md](PROJECT_STATUS.md#log). Then work run-driven from
+      the first strict failure.
+- [ ] **Game:** run `module_start` for the other modules in dependency
+      order before the entry module, taking the order from the oracle's
+      module-load log. Today only the selected entry module is started.
+- [ ] **Game:** print the first strict failure with its symbol name once
+      the M1 symbol map exists.
 - [ ] **Framework:** grow kernel, thread, synchronization, sysmem, I/O,
       FIOS2, ULT, and libc coverage as the run asks for it. That includes
       the ULT fiber scheduler and real asynchronous FIOS2 if the game
