@@ -7,15 +7,15 @@ Windows with DX12 and Vulkan at 30 fps or higher ([GOAL.md](GOAL.md)).
 ([ROADMAP.md](ROADMAP.md)). The code path that builds a local generated
 bundle into the host and enters it exists. Its first real-bundle attempt
 now passes relocation preflight and binding, then calls translated title code.
-The ordered three-module startup now reaches GXP vertex-program creation in a
-strict DX12 WARP run after passing the measured GXM/GXP reflection path.
+The ordered three-module startup now parses the first title vertex GXP and
+stops strictly inside its USSE census.
 
 | Milestone | State |
 |---|---|
 | M0 Foundation | ✅ Done (2026-10-25) |
 | M1 Lift and link | ▶ Build path done. Trap ranking and symbol map open |
-| M2 Into title code | ▶ Ordered module startup reaches GXP vertex-program creation; no frame loop yet |
-| M3 First frame | ◌ Run-driven GXM/GXP groundwork started; shader translation and presentation remain |
+| M2 Into title code | ▶ Ordered startup reaches the first title shader census; no frame loop yet |
+| M3 First frame | ◌ First vertex GXP measured; shader translation and presentation remain |
 | M4–M7 | Not started |
 
 The game does not boot yet. All three translated modules start in retained
@@ -31,7 +31,7 @@ frame loop.
 | Title entry | The title session loads and binds the retained module set, configures process/TLS/CPU state, and runs support-module starts followed by the entry module inside one strict `vita_guest_call` boundary. Exit 11 = preparation failure, 12 = first strict failure, 13 = exit request; 9 = no bundle ([NATIVE_HOST.md](NATIVE_HOST.md)) |
 | Memory plan | Derived from validated load ranges, with 96 MiB main Sysmem, 128 MiB CDRAM, 16 MiB physically contiguous memory, and a 384 MiB maximum guest window |
 | Runtime/HLE (framework) | Checked memory, ARM/VFP CPU state, baton scheduler, threads and sync, partitioned allocators, libc/libm, import registry, I/O/FIOS2 (synchronous), ULT sync subset, VFS/PSARC |
-| GXM / GXP / USSE | Measured bridge covers initialization, memory/USSE maps, contexts, patcher registration, linear textures, and the GXP reflection path reached by the title. The strict frontier is `sceGxmShaderPatcherCreateVertexProgram`; no USSE translator or scene/draw path exists yet |
+| GXM / GXP / USSE | Measured bridge covers initialization, memory/USSE maps, contexts, patcher registration, linear textures, GXP reflection, bounded primary/secondary instruction parsing, and an aggregate USSE family census. The first title vertex GXP contains 9 instructions: 1 classified `PHAS` and 8 unknown; the first unknown is primary instruction 1. No shader object, translator, or scene/draw path exists yet |
 | Display, audio, input, movies, saves | Not started (M3–M4) |
 | GPU contract and backends (framework) | Production DX12 and Vulkan backends behind one C ABI, with one HLSL source compiled by pinned DXC to DXIL and SPIR-V. Self-test verified on DX12 WARP, DX12 hardware, and Vulkan with validation |
 | Windows host (this repository) | Strict CLI, manifest/ELF validation, read-only `app0:` mount, explicit renderer selection with no fallback, clear/triangle self-test, title session |
@@ -40,9 +40,9 @@ frame loop.
 
 ## Known blockers, in order
 
-1. `sceGxmShaderPatcherCreateVertexProgram` needs the first real GXP/USSE
-   translation path; shader creation must not return a success-shaped object
-   without host-executable output (M3).
+1. The first unknown family at primary instruction 1 of the measured vertex
+   GXP must be classified and translated independently; shader creation still
+   cannot return an object without host-executable output (M3).
 2. The strict run has not reached 60 display flips or `sceGxmBeginScene`
    iterations, so M2 remains open.
 3. The trap census has not been ranked by boot-path reachability, and
@@ -84,7 +84,7 @@ failure. All inputs were public or synthetic.
 
 | Component | Revision |
 |---|---|
-| Framework pin (`third_party/vitarecomp`, `config/framework.commit`) | `c645ee434abdd48482fb8b4c126d8a821f915a77`: ordered-start runtime support, ARM/Thumb import identity, partitioned Sysmem, and the measured GXM/GXP bridge. Windows quality and 22/22 CTests pass |
+| Framework pin (`third_party/vitarecomp`, `config/framework.commit`) | `3bee24040d08ce7048b18a3f73fb66f466953e68`: bounded GXP instruction parsing, USSE family census, and a strict vertex-program boundary layered on the ordered-start GXM bridge. Windows quality and 24/24 CTests pass |
 | M0 framework pin | `f3408e1ea73b724c7ba3a644633938c220f2cc2a` |
 | Upstream base (`sp00nznet/vitarecomp`) | `6ed4a5c59045706292c8ec03dfe5207ecc4033a4`, tagged `upstream-start-6ed4a5c5` in the fork. Upstream has no later commits |
 | M0 accepted game revision | `36fef0e94ab99d1fc6e1903f02a388013eb3585d` |
@@ -95,6 +95,11 @@ failure. All inputs were public or synthetic.
 Add one short entry per meaningful step: what now works, and the measured
 number if there is one. Do not write separate verification reports.
 
+- **2026-10-26:** The first title vertex GXP now reaches a bounded,
+  title-neutral USSE census: 9 instructions total, 1 classified `PHAS`, 8
+  unknown, first unknown at primary instruction 1. Vertex creation exits 12
+  without allocating or returning a shader object; framework quality and
+  24/24 CTests pass.
 - **2026-10-26:** Ordered startup of all three translated modules now reaches
   `sceGxmShaderPatcherCreateVertexProgram` under strict DX12 WARP after
   partitioned Sysmem and the measured GXM/GXP reflection path. Framework

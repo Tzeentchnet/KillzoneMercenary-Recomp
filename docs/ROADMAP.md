@@ -9,8 +9,8 @@ behavior of the real game, not on reports.
 |---|---|---|
 | [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
 | [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
-| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: ordered module startup reaches GXP vertex-program creation |
-| [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: ordered startup reaches the first title shader census |
+| [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | ◌ First vertex GXP measured; translation not started |
 | [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
 | [M5](#m5--first-mission) | Mission 1 playable start to finish | |
 | [M6](#m6--30-fps) | 30 fps or higher, p95, on both backends | |
@@ -175,9 +175,9 @@ Tasks:
 - [x] **Run it:** the ordered three-module DX12 WARP run now passes measured
       process/TLS/libc/AppUtil startup, partitioned Sysmem, GXM initialization,
       mappings, context and shader-patcher registration, and GXP reflection.
-      It stops explicitly at
-      `SceGxm::sceGxmShaderPatcherCreateVertexProgram`; no frame loop or shader
-      translation is claimed.
+      Vertex-program creation now parses bounded GXP instruction streams and
+      stops explicitly at the first unsupported USSE family after an aggregate
+      census; no frame loop or shader translation is claimed.
 - [ ] **Game:** print the first strict failure with its symbol name once
       the M1 symbol map exists.
 - [ ] **Framework:** grow kernel, thread, synchronization, sysmem, I/O,
