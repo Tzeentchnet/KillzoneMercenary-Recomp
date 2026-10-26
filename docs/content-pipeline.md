@@ -253,8 +253,7 @@ local bundle may instead enter the strict host preparation path documented in
 must never be committed. Public presets and hosted CI leave
 `KZMRECOMP_GENERATED_SOURCE_DIR` empty and contain no private bundle.
 
-Gate 1 is implemented and publicly/synthetically verified but remains
-privately unclosed. A private clean return or repeat-identical first named
-strict stop would be optional stronger acceptance evidence; neither exists in
-the local status records, and neither would establish bootability or
-playability.
+That entry path has public synthetic coverage, but it has not yet been run
+with a real local bundle. That first run is the next step of milestone M2 in
+[`ROADMAP.md`](ROADMAP.md#m2--into-title-code). The one-command local build
+is M7.

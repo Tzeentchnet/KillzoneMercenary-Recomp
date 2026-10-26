@@ -103,4 +103,4 @@ the title ID, and public documentation images. Review remains mandatory.
 See [`content-pipeline.md`](content-pipeline.md) for exact inspection and
 external dump commands, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
 two-repository/process boundary, and [`ROADMAP.md`](ROADMAP.md) for the
-deferred local-generation packaging gate.
+one-command local build milestone (M7).

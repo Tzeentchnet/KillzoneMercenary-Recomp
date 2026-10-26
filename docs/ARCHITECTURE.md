@@ -1,26 +1,23 @@
-# Current architecture
+# Architecture
 
-This document is rooted in the accepted first-checkpoint architecture at game
-revision `36fef0e94ab99d1fc6e1903f02a388013eb3585d` and framework revision
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The current framework revision is
-`0e81bb4b275435b2396b01a88c8d767d0104cc8b`, which is the exact
-`third_party/vitarecomp` gitlink and the value in `config/framework.commit`.
-It also records the subsequent strict host-entry wiring.
+This document describes how the native *Killzone Mercenary* build is put
+together: what exists at the framework pin
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b`, and where the remaining pieces
+go on the way to the goal in [GOAL.md](GOAL.md). Milestone order is in
+[ROADMAP.md](ROADMAP.md).
 
-**Gate 1 status: implemented and publicly/synthetically verified; privately
-unclosed.** This remains a native foundation, not a title-boot or playability
-milestone. Public builds have no generated bundle and deliberately exit 9. An
-opt-in validated local bundle can enter only through the fail-closed
-preparation and guest-call boundary below. No ignored local status file records
-a successful private real-entry attempt.
+The host can already prepare and enter a locally generated bundle through a
+strict, one-call boundary (see [Native host](#native-host)). That path has
+public synthetic coverage but has not yet been run on a real local bundle.
+Public builds contain no bundle and exit 9 in title mode.
 
 ## Repository and process boundaries
 
 | Boundary | Owns | Must not own |
 |---|---|---|
-| [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/0e81bb4b275435b2396b01a88c8d767d0104cc8b) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
+| [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/0e81bb4b275435b2396b01a88c8d767d0104cc8b) (fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp)) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
 | This game repository | PCSA00107 policy and configuration; native Windows host; strict content/manifest validation; external-content workflow; local generated-source staging; title-specific compatibility work | Retail data, keys, generated title code, Vita3K source/runtime, or a second production recompiler |
-| External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, and optional behavioral-oracle observations | Production CPU execution, native-host services, renderer fallback, or a runtime dependency |
+| External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, behavioral-oracle observations (screenshots, import logs), and source reading as reference | Production CPU execution, native-host services, renderer fallback, a runtime dependency, or project feature work (no fork) |
 | Ignored local private roots | User-supplied archive, portable Vita3K state, runtime images, manifests, reports, captures, and generated code | Git history, hosted CI, published source archives, or shared build artifacts |
 
 Vita3K is therefore an extraction/oracle tool only. The native application
@@ -77,8 +74,8 @@ that policy before staging or compilation.
 The accepted private three-image baseline generated 809 byte-identical files
 across two runs; all 800 generated C translation units compiled with MSVC
 warnings as errors. Its 3,770 explicit trapped instruction instances remain a
-readiness signal. They are historical generation evidence, not private Gate 1
-entry evidence. If a configured entry reaches one, the first named trap stops
+readiness signal. They are generation evidence, not evidence of a real
+entry run. If a configured entry reaches one, the first named trap stops
 the guest call and is reported as a strict failure.
 
 ### Standalone runtime and HLE
@@ -90,8 +87,8 @@ read-only VFS/PSARC behavior. Unsupported imports return a named error or trap;
 they never return success merely to continue execution.
 
 The guest `sceGxm` bridge, GXP/USSE translation, media, input, savedata UI and
-policy, networking, and title-specific compatibility remain deferred even
-though the underlying native renderer contract is implemented.
+policy, and title-specific compatibility are not implemented yet (M3–M5).
+Networking only needs to report "offline" correctly.
 
 ### Native host
 
@@ -100,6 +97,10 @@ manifest and ELF revalidation, redacted diagnostics, Win32 window lifecycle,
 runtime/VFS creation, renderer selection, and deterministic teardown. A valid
 external image set is mounted read-only as `app0:` only after path, range,
 metadata, size, and hash checks pass.
+
+The public clear/triangle self-test is the only execution mode that needs no
+private input. Without a configured generated bundle, valid title content
+reaches the explicit `title_not_implemented` boundary and exits 9.
 
 For title preparation, validated load ranges feed an explicit bounded-window
 policy in `src/game/title_config.*`. The deterministic plan places disjoint
@@ -146,14 +147,50 @@ DXC `1.8.2505.32` is pinned. The same source is compiled to DXIL and SPIR-V.
 DX12 WARP is the required software conformance path. Vulkan requires an
 available 1.3 loader/ICD and reports absence explicitly.
 
-## Status at the checkpoint
+## Target runtime design
+
+These are the pieces still to be built, and where each one goes.
+
+```text
+generated C (all modules, one dispatch table)
+  -> vitarecomp runtime: memory, CPU state, scheduler, HLE registry
+       |-- kernel / threads / sync / sysmem / io / fios2 / ult   (exists, grows run-driven)
+       |-- sceGxm bridge -> scene/draw translation -> GPU contract     (M3)
+       |       '-- GXP parse + reflect -> USSE -> HLSL -> DXC -> DXIL/SPIR-V
+       |-- sceDisplay -> swapchain present, vblank pacing              (M3)
+       |-- sceCtrl / sceTouch / sceMotion -> host input                (M4)
+       |-- sceAudioOut / sceNgs / ATRAC9 -> WASAPI                     (M4)
+       |-- sceAvPlayer -> Media Foundation                             (M4)
+       '-- savedata / appmgr / dialogs -> user-data directory          (M4)
+  -> game host: boot order, memory map, settings, title hooks
+  -> DX12 or Vulkan backend (explicit, no fallback)
+```
+
+Design points that the 30 fps target depends on (M6, prepared from M2):
+
+- **Guest memory:** move from a checked call per access to one reserved host
+  region addressed as base plus guest offset, with guard pages. Checked
+  accessors stay at HLE boundaries and in debug builds.
+- **Dispatch:** an O(1) indirect-target lookup over the combined
+  multi-module table, and direct calls for static targets.
+- **Threads:** the current baton scheduler runs one guest thread at a time.
+  Keep it while the frame budget allows; run guest threads on host threads
+  in parallel only when measurement requires it.
+- **GPU:** guest surfaces and textures live in guest memory and go through
+  a cache with explicit invalidation. Shaders are translated once and kept
+  in a persistent local cache, with pipeline caches on both backends.
+  PVRTC is decoded or transcoded because desktop GPUs lack it.
+- **Pacing:** `sceDisplay` flips map to present with vblank-equivalent
+  timing, so game logic sees the cadence it expects.
+
+## Status
 
 | Classification | Behavior |
 |---|---|
 | **Implemented** | Offline static CPU pipeline; versioned generated-module ABI/composition and local provenance; standalone runtime/HLE foundation; read-only VFS; strict conditional title preparation/entry; versioned GPU ABI; production DX12/Vulkan backends; Win32 host; content inspection, dump, and manifest tools; safety guards |
 | **Verified** | Historical clean-clone foundation matrix; public homebrew E2E; deterministic private generation; public/synthetic ABI composition, provenance, retained-content, preparation, and generated-bundle outcome tests; DX12 WARP/hardware and validation-enabled Vulkan self-tests; explicit no-fallback negative paths |
-| **Deferred** | Complete startup imports and title services; guest GXM; GXP/USSE; title-frame backend parity; audio/input/save/movie services; gameplay; performance work; local-only package assembly |
-| **Intentionally out of scope** | PFS/key derivation or extraction; distributing private content/generated title code; embedded Vita3K or other emulator; runtime JIT/interpreter fallback; silent unsupported behavior; automatic renderer fallback |
+| **Next (M1–M7)** | First real-bundle entry run; trap ranking and symbol map; startup imports; guest GXM; GXP/USSE; title frames on both backends; audio/input/save/movie; gameplay; 30 fps performance; one-command local build |
+| **Intentionally out of scope** | PFS/key derivation or extraction; distributing private content/generated title code; embedded Vita3K or other emulator; a Vita3K fork or Vita3K feature work; runtime JIT/interpreter fallback; silent unsupported behavior; automatic renderer fallback; online play |
 
 ## Test and CI layers
 
@@ -169,16 +206,16 @@ available 1.3 loader/ICD and reports absence explicitly.
    validation-enabled Vulkan run when available; invalid selections must fail
    without fallback.
 5. **Private foundation acceptance:** only ignored local inputs/outputs were
-   used and public reporting is aggregate/redacted. No private Gate 1
-   real-entry acceptance is recorded.
+   used and public reporting is aggregate/redacted. No real-bundle entry run
+   is recorded yet.
 6. **Hosted CI:** public-source-only quality plus Debug/RelWithDebInfo/Release
    game builds and Debug/Release framework builds. The generated-source cache
    path stays empty; CI receives no private bundle.
 
 Historical accepted evidence is in
-[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md). Current Gate 1
-public commands and results are in
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md#gate-1-public-synthetic-validation).
+[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md). Current
+title-entry test commands and results are in
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md#title-entry-validation).
 The historical public runs are framework
 [40185631954](https://github.com/Tzeentchnet/vitarecomp/actions/runs/40185631954),
 game foundation
@@ -195,9 +232,11 @@ and game report
 - A requested renderer, adapter, or validation layer is never substituted.
 - GPU contract operations that are not implemented return
   `VITA_GPU_ERROR_UNSUPPORTED`; they do not report success.
-- A generated title entry remains unreachable unless every host preparation
-  gate succeeds; later title/HLE/GPU gates in [`ROADMAP.md`](ROADMAP.md) do
-  not gain success-shaped fallbacks.
+- During bring-up, an import may be a *named stub*: registered, logged on
+  first call, and listed as `stubbed` in the import inventory. A silent
+  success is never allowed. See the [roadmap working rules](ROADMAP.md#working-rules).
+- A generated title entry stays unreachable unless every host preparation
+  stage succeeds.
 
 ## Framework references
 

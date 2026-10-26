@@ -1,201 +1,308 @@
-# Post-foundation roadmap
+# Roadmap
 
-The verified foundation is complete. The following backlog is ordered by
-dependency and closes only on measurable evidence. It contains no schedule or
-time estimate. Public builds keep the explicit exit-9
-`title_not_implemented` boundary because they contain no generated bundle.
+Every milestone moves the project toward the goal in [GOAL.md](GOAL.md): a
+statically recompiled *Killzone Mercenary* running natively on Windows with
+DX12 and Vulkan at 30 fps or higher. Milestones close on observable
+behavior of the real game, not on reports.
 
-Every gate inherits these rules:
+| Milestone | Outcome | State |
+|---|---|---|
+| [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
+| [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: strict entry path done, first real-bundle run pending |
+| [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
+| [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
+| [M5](#m5--first-mission) | Mission 1 playable start to finish | |
+| [M6](#m6--30-fps) | 30 fps or higher, p95, on both backends | |
+| [M7](#m7--full-campaign) | Full campaign plus a one-command local build | |
 
-- private inputs, generated title code, traces, captures, and packages stay in
-  ignored local roots;
-- unsupported CPU, import, HLE, GPU, and service behavior fails explicitly;
-- Vita3K may supply external extraction or oracle evidence but is never a
-  production dependency;
-- DX12 and Vulkan are selected explicitly and never fall back to each other;
-  and
-- public synthetic regression coverage accompanies every private measurement.
+Earlier documents call the strict title-entry work "Gate 1". In this
+roadmap, that work is the M1 build path plus the first M2 tasks.
 
-## 1. Strict title-entry execution
+M6 is listed after M5 because optimization needs correct behavior to
+measure. Performance is still designed in from M2: see
+[Performance guardrails](#performance-guardrails).
 
-**Goal:** call the real translated module entry only after all preconditions
-are proven.
+## Working rules
 
-**Gate 1 status: implemented and publicly/synthetically verified; privately
-unclosed.**
+These replace the old "close every gate before running" ordering.
 
-The accepted public implementation includes:
+- **Run-driven bring-up.** Run the game, fix the first failure, and run
+  again. Title code may be entered before every trap is closed. A trap that
+  is actually hit is the next task; one that is never hit can wait.
+- **Fail loudly, never silently.** Unimplemented imports and untranslated
+  instructions stop execution with a named diagnostic by default.
+  `VITARECOMP_TRACE=1` (log and continue) is a bring-up aid only.
+- **Named stubs are allowed.** An import may return a fixed plausible result
+  while bring-up continues, if it:
+  - is registered in a title stub table;
+  - logs its name the first time it is called; and
+  - appears as `stubbed` in the import inventory.
 
-- generated-module ABI v4, schema-v4 module reports and sidecars with explicit
-  TLS alignment, deterministic `armrecomp compose`, and schema-v4 aggregate
-  reports/registries with checked TLS offsets and order;
-- entry policy v1: body cuts, unreported partitions, unclassified traps,
-  missing function-entry or PC instrumentation, incomplete metadata, or
-  unresolved/ambiguous entry records block before entry; fully classified
-  named traps remain entry-eligible only as the first strict stop;
-- deterministic local provenance schema/tools and provenance-required staging,
-  bound to the framework revision, raw-manifest identity, exact command token
-  arrays, reports, partitions, and generated inventory;
-- retained immutable module bytes, with no path reopen between validation and
-  strict loading;
-- fail-closed content identity, layout, runtime/mount, module preflight/load,
-  descriptor/dispatch, binding, stack, TLS template/materialization, and
-  CPU-state gates;
-- a move-only capability consumed by at most one `vita_guest_call`, with
-  dedicated precondition, strict-failure, explicit-exit, and clean-return
-  outcomes; and
-- public malformed and synthetic tests proving zero calls on every preparation
-  failure, one call on completion or strict stop, and deterministic repeated
-  process output.
+  Replacing stubs with real implementations is tracked work. What stays
+  forbidden is a silent success path.
+- **Oracle, not fork.** Vita3K is used only as described in
+  [GOAL.md](GOAL.md#vita3ks-role-oracle-and-reference-only).
+- **Content stays private.** Dumps, generated C, traces, captures, and
+  shader caches stay in ignored local roots
+  ([CONTENT_POLICY.md](CONTENT_POLICY.md)). Public CI stays source-only.
+- **Tests follow fixes.** A framework or host bug found in the game gets a
+  small synthetic regression test. New CI jobs, verification reports, and
+  provenance documents are not milestone work.
 
-**Private closure criterion (not met):** an instrumented entry attempt using a
-locally generated real bundle must pass every structural precondition and then
-either return cleanly or stop at its first classified named strict failure.
-No ignored local status file records that evidence. Public and hosted builds
-remain source-only, leave `KZMRECOMP_GENERATED_SOURCE_DIR` empty, and keep
-default exit 9.
+## M0 — Foundation
 
-Optional stronger acceptance evidence is a clean return rather than a named
-strict stop and a second run that reproduces the same outcome. Those are not
-required to accept the public implementation, are not hosted-CI criteria, and
-would not by themselves establish bootability or playability.
+✅ Done (2026-10-25). See [PROJECT_STATUS.md](PROJECT_STATUS.md) and the
+historical [FOUNDATION_VERIFICATION.md](FOUNDATION_VERIFICATION.md).
 
-## 2. Imports, threading, and filesystem startup
+- Framework fork with static ARM/Thumb → C recompiler, runtime/HLE
+  foundation, shared GPU contract, and production DX12 and Vulkan backends.
+- Windows host with explicit renderer selection and a clear/triangle
+  self-test.
+- Content pipeline: archive inspection, external Vita3K dump of three
+  post-link runtime images, and a validated manifest with a read-only `app0:`
+  mount.
+- The lift of all three images compiles: 96.37% of executable bytes covered,
+  99.897% of emitted instructions translated, 3,770 explicit traps remaining.
 
-**Goal:** reach a reproducible early startup checkpoint through the standalone
-runtime.
+## M1 — Lift and link (decompile)
 
-**Closure gates:**
+**Outcome:** one local build produces `kzmrecomp_host.exe` with all
+generated game code linked in, plus a symbol map for working with it.
 
-- derive the complete reachable startup import inventory and classify every
-  import as implemented, documented firmware error, or explicit unsupported;
-- exercise thread/TLS creation, synchronization, callbacks, teardown, and
-  restart without deadlock or leaked runtime objects;
-- serve `app0:` only through the read-only VFS and define separate,
-  path-contained writable mounts for local save/cache behavior;
-- make scheduler, clock, and filesystem observations deterministic enough for
-  a repeatable startup trace; and
-- reach the same named startup checkpoint on repeated clean runs with zero
-  silent import success.
+Exit criteria:
 
-## 3. GXM scene capture
+1. A single local command takes a validated manifest to a host build that
+   links the generated C for all three runtime images. Public CI keeps
+   building the no-content host.
+2. Generated functions from all images share one deterministic dispatch
+   table. Duplicate or overlapping keys fail the build.
+3. The 3,770 traps are ranked by class and by distance from the boot path,
+   and the top classes are fixed in the framework.
+4. A local, ignored symbol map names functions from exports, the import NID
+   database, and recovered strings/RTTI. Trap and crash diagnostics print
+   those names.
 
-**Goal:** translate guest GXM calls into a renderer-neutral scene description
-before implementing title shaders.
+Tasks:
 
-**Closure gates:**
+- [x] **Framework:** compose multi-image output into one dispatch registry
+      and generation report (`armrecomp compose`, generated-module ABI,
+      framework `0e81bb4`, now pinned).
+- [x] **Game:** the `KZMRECOMP_GENERATED_SOURCE_DIR` CMake option builds a
+      provenance-validated generated bundle (generated C plus the composed
+      registry) into the host. It is empty by default, and CI never sets
+      it. See [generated-source-provenance.md](generated-source-provenance.md).
+- [ ] **Game:** one local command that chains the existing steps: manifest
+      validation, `armrecomp emit` per image, `armrecomp compose`,
+      `New-GeneratedSourceProvenance.ps1`, provenance-required staging,
+      configure, and build.
+- [ ] **Framework:** rank the trap census by reachability from the module
+      entries (compose already classifies traps by kind), then fix the
+      largest NEON/VFP, branch-target, and transfer-shape classes on the
+      boot path.
+- [ ] **Framework/Game:** a symbol map format consumed by trap and dispatch
+      diagnostics.
+- [ ] **Framework:** build warnings-clean with Linux clang and GCC so that
+      cloud sessions can test CPU/HLE changes. The fix is done and verified
+      (zero warnings, 19/19 CTest on both compilers), but it is not pushed:
+      this session has no push access to the fork. It also fixes two real
+      bugs: NID names over 63 bytes were truncated into wrong HLE symbols,
+      and FIOS overlay paths could be silently truncated. See
+      [PROJECT_STATUS.md](PROJECT_STATUS.md#log).
+- [ ] **Framework:** fix the Windows quality gate, which fails on any C/C++
+      change because it hands LLVM's `git-clang-format.bat` to Python (fork
+      CI run 40255206038). The fix is done, not pushed (same reason).
 
-- implement the measured guest `sceGxm` object, memory-mapping, context,
-  state, scene, draw, sync, and display-queue ABI needed by the first scene;
-- validate every guest structure and range before creating a host object;
-- capture one deterministic, redacted scene/command inventory in an ignored
-  local root;
-- replay an equivalent public synthetic scene through the shared GPU contract;
-  and
-- reject unsupported GXM state or ordering rather than dropping it.
+## M2 — Into title code
 
-## 4. GXP/USSE shader integration
+**Outcome:** the recompiled game starts, runs its static initialization and
+module start-up, creates its threads, and repeatedly reaches its per-frame
+display/GXM calls.
 
-**Goal:** turn guest shader programs into the one canonical host shader path.
+Exit criteria:
 
-**Closure gates:**
+1. With a local generated bundle, title mode runs the real boot sequence.
+   Exit 9 (`title_not_implemented`) remains only for public builds, which
+   have no bundle.
+2. Three consecutive clean runs reach the frame loop. That means at least 60
+   iterations of the game's display flip or `sceGxmBeginScene` calls, with
+   no trap.
+3. An import inventory is written on every run. It lists each import as
+   implemented, stubbed, or missing, with call counts, and nothing is
+   missing on the boot path.
+4. The import call sequence matches a Vita3K `log_imports` run of the same
+   build up to the first frame. Any deviation is explained.
 
-- parse and bounds-check GXP containers plus the reflection queries used by
-  the title;
-- translate measured USSE instructions and resource bindings to canonical
-  HLSL with an explicit unsupported census;
-- compile that HLSL with pinned DXC `1.8.2505.32` to both DXIL and SPIR-V;
-- add public synthetic parser/reflection/compiler tests and deterministic
-  private shader-report checks; and
-- render the captured scene without a prebuilt private shader cache or
-  backend-specific title patch.
+Tasks:
 
-## 5. DX12/Vulkan title-frame parity
+- [x] **Game:** derive the title memory plan from the validated load
+      ranges, with disjoint heap, sysmem, kernel, main-stack, and TLS arenas
+      (`src/game/title_config.*`).
+- [ ] **Game:** add GPU-mapped (CDRAM-equivalent) memory to that plan, and
+      check whether its 256 MiB window cap fits the game's real allocations.
+- [x] **Framework:** strict module-set preflight/load, export/import
+      binding by NID, checked main-stack/TLS/CPU entry preparation, and the
+      `vita_guest_call` boundary that reports completion, an exit request,
+      or the first strict failure (framework `0e81bb4`; see its
+      `docs/ENTRY_STATE.md`).
+- [x] **Game:** wire the host to those APIs. The title session loads the
+      composed module set from retained bytes, binds imports, prepares
+      stack/TLS/CPU, and calls the entry module's `module_start` once
+      through `vita_guest_call`. Exit codes: 0 clean return, 11
+      preparation failure, 12 first strict failure, 13 exit request
+      ([NATIVE_HOST.md](NATIVE_HOST.md)).
+- [ ] **Run it (needs the owner's dump on Windows):** do the first
+      real-bundle entry run and record its outcome in
+      [PROJECT_STATUS.md](PROJECT_STATUS.md#log). Then work run-driven from
+      the first strict failure.
+- [ ] **Game:** run `module_start` for the other modules in dependency
+      order before the entry module, taking the order from the oracle's
+      module-load log. Today only the selected entry module is started.
+- [ ] **Game:** print the first strict failure with its symbol name once
+      the M1 symbol map exists.
+- [ ] **Framework:** grow kernel, thread, synchronization, sysmem, I/O,
+      FIOS2, ULT, and libc coverage as the run asks for it. That includes
+      the ULT fiber scheduler and real asynchronous FIOS2 if the game
+      depends on them.
+- [ ] **Game:** writable, path-contained `ux0:`-style mounts for saves and
+      cache under a user-data directory.
+- [ ] **Framework:** return the documented offline results for the
+      net/NP/trophy imports.
 
-**Goal:** prove both production backends implement the same title-facing GPU
-contract.
+## M3 — First frame
 
-**Closure gates:**
+**Outcome:** the first frame the game itself renders, such as a logo or
+splash screen, is presented through DX12 and then Vulkan, and matches the
+oracle's screenshot.
 
-- replay identical captured scene inputs through explicitly selected DX12 and
-  Vulkan backends;
-- compare deterministic readbacks using a documented exact or tolerance-based
-  metric;
-- pass resize, minimize/restore, resource lifetime, device teardown, and
-  repeated startup tests on both paths;
-- pass validation/debug diagnostics where the host environment exposes them;
-  and
-- prove unavailable backend, adapter, shader capability, and validation
-  requests fail without selecting the other backend.
+Exit criteria:
 
-## 6. Audio, input, save, and movie services
+1. A captured first frame matches the oracle's screenshot of the same frame
+   on both backends. "Matches" means visually equivalent, with the metric
+   chosen when the frame exists.
+2. Every `sceGxm` call on the path to that frame is implemented; none are
+   stubbed.
+3. GXP programs on that path are translated by our USSE → HLSL translator
+   and compiled with DXC to DXIL and SPIR-V. There is no prebuilt or
+   hand-written per-title shader.
 
-**Goal:** add user-facing services as independent, measurable contracts.
+Tasks:
 
-**Closure gates:**
+- [ ] **Framework:** guest `sceGxm` ABI. Start with the 85-odd shallow state
+      setters and accessors, then memory mapping, contexts, render targets,
+      color/depth surfaces, sync objects, and the display queue.
+- [ ] **Framework:** `sceDisplay` flips into the host swapchain present,
+      with vblank timing.
+- [ ] **Framework:** GXP container parsing and the reflection queries the
+      game uses.
+- [ ] **Framework:** USSE decoder and translator to HLSL. Grow it one
+      instruction class at a time from the shaders the game actually
+      registers. Unsupported instructions fail with a census.
+- [ ] **Framework:** scene, draw, and mid-scene-flush semantics mapped onto
+      DX12/Vulkan render passes. Guest surfaces go through a surface/texture
+      cache with explicit invalidation on CPU writes.
+- [ ] **Framework:** texture formats. Swizzled and tiled layouts, and PVRTC
+      (no desktop GPU support, so decode or transcode it), plus the UBC/BC
+      formats.
+- [ ] **Game/Framework:** runtime shader translation with a persistent local
+      cache keyed by GXP hash, and a DX12/Vulkan pipeline cache.
 
-- inventory the exact title imports and data flows for audio, controller/touch,
-  savedata/dialog policy, and movie/codec playback;
-- implement each service behind a host-neutral boundary with synthetic tests,
-  lifecycle tests, and explicit unsupported behavior;
-- keep save data and caches in an explicit external user-data root;
-- demonstrate deterministic input injection and audio/movie decode fixtures
-  that contain no retail payload; and
-- close each service independently rather than using a global “implemented”
-  claim.
+## M4 — Main menu
 
-Networking, NP/sign-in, commerce, and other online platform behavior stay
-deferred until separately scoped; no offline success stubs may impersonate
-them.
+**Outcome:** boot to the main menu with sound and FMV, navigate it with a
+controller or keyboard/mouse, and change settings that persist, on both
+backends.
 
-## 7. Gameplay progression
+Tasks:
 
-**Goal:** advance through named, reproducible gameplay checkpoints.
+- [ ] **Input:** `sceCtrl` from XInput/GameInput and keyboard/mouse.
+      `sceTouch` front and rear panels mapped to buttons, mouse, or
+      gestures. `sceMotion` stubbed or mapped.
+- [ ] **Audio:** `sceAudioOut` through WASAPI. `sceNgs` voices and mixing.
+      ATRAC9 decode, using an independent decoder with a compatible license.
+- [ ] **Movies:** `sceAvPlayer`, decoding H.264/AAC through Media
+      Foundation, with frames delivered as guest textures.
+- [ ] **Saves/dialogs:** `sceAppUtil`/savedata into the user-data
+      directory. Common dialogs and IME get native minimal implementations.
+- [ ] **Game:** a settings file for renderer, adapter, resolution scale,
+      bindings, and audio device.
 
-**Closure gates:**
+## M5 — First mission
 
-- define checkpoints by observable state, not elapsed time;
-- record the imports, strict traps, renderer errors, and service gaps at each
-  checkpoint in redacted local reports;
-- reproduce each checkpoint from a documented clean state on both renderers;
-- add a public synthetic regression for every framework or host defect found;
-  and
-- make regressions fail before promoting the next checkpoint.
+**Outcome:** mission 1 can be played from start to finish, saved, and
+reloaded on both backends, without crashes and with correct world, HUD,
+lighting, and post-processing.
 
-This gate does not begin with or imply a claim of general bootability or
-playability.
+Tasks:
 
-## 8. Correctness-first performance
+- [ ] Translate the remaining GXP/USSE instructions as gameplay shaders
+      reach them.
+- [ ] Render-target feedback, readbacks, and CPU access to GPU memory that
+      the engine uses, done without whole-frame stalls.
+- [ ] Touch-driven gameplay actions, such as melee and hacking, mapped to
+      controller and mouse.
+- [ ] Named checkpoints (for example *mission 1 loaded*, *first combat*,
+      *mission complete*), each reproducible from a clean user-data
+      directory on both backends.
 
-**Goal:** optimize only measured native bottlenecks after the corresponding
-behavior is correct.
+## M6 — 30 fps
 
-**Closure gates:**
+**Outcome:** the definition of done's performance criterion D3 holds: p95
+frame time of 33.3 ms or less, and no stall over 100 ms, on the reference PC,
+on both backends.
 
-- define deterministic CPU, shader-translation, frame, memory, and startup
-  benchmarks with hardware/environment metadata;
-- establish baselines and regression thresholds before changing algorithms;
-- preserve strict checks, deterministic generation, and backend parity under
-  optimization;
-- identify profile evidence for every optimization; and
-- keep software/WARP correctness coverage even when hardware paths are tuned.
+Tasks:
 
-## 9. Local-generation packaging
+- [ ] **Benchmark harness:** fixed scenes from M5 checkpoints, a frame-time
+      capture, a CPU/GPU split, and a JSON result written locally.
+- [ ] **Guest memory fast path:** one reserved host region (base + offset)
+      with guard pages instead of a bounds-checked call per access. Checked
+      accessors stay for debug builds and HLE boundaries.
+- [ ] **Dispatch:** O(1) indirect-call lookup instead of binary search, and
+      direct calls wherever the target is static.
+- [ ] **Threads:** measure whether the one-guest-thread-at-a-time baton
+      scheduler fits the frame budget. If it does not, run guest threads on
+      host threads in parallel, keeping exclusive-monitor correctness.
+- [ ] **GPU:** batch submissions, keep CPU/GPU sync minimal, precompile
+      pipelines from the shader cache, and avoid per-frame texture
+      re-uploads.
+- [ ] **Frame pacing:** present timing that matches the game's vblank
+      expectations. Optional uncapped or 60 fps mode where game logic
+      allows (stretch).
 
-**Goal:** let a user produce a native package locally from their own lawful
-content without publishing derived private outputs.
+## M7 — Full campaign
 
-**Closure gates:**
+**Outcome:** the whole single-player campaign is playable on both backends,
+and a user can produce a build from their own dump with one documented
+command sequence (D5).
 
-- provide one clean-clone command sequence for inspection, external
-  extraction, manifest creation, static generation, staging, compile, and
-  package assembly;
-- make every tool and revision input explicit and provenance-recorded;
-- prove two runs from identical local inputs produce identical source/package
-  inventories where platform signing metadata permits;
-- scan the source tree and Git index before and after packaging with the
-  private-content guard and artifact-quality gates;
-- ensure hosted CI and release automation never require, upload, cache, or
-  attest to private/generated title payloads; and
-- document that locally generated packages are not project-distributed game
-  builds and remain subject to the user's content rights and applicable law.
+Tasks:
+
+- [ ] Every campaign mission reaches *mission complete* on both backends.
+- [ ] One-command local pipeline: inspect → external extraction → manifest
+      → lift → build → run. It records the tool revisions and never
+      uploads private output.
+- [ ] Stretch goals: higher internal resolution, a 60 fps mode, and
+      widescreen UI fixes, through title hooks in `src/game`.
+
+## Performance guardrails
+
+These apply from M2 so that M6 does not mean re-architecting:
+
+- Track how long the generated CPU code takes per game frame once the frame
+  loop runs (M2). Track GPU frame time from the first frame (M3).
+- Bring-up uses RelWithDebInfo. Debug-only checks must not become the only
+  supported configuration.
+- New runtime paths avoid per-call allocation, global locks on hot paths,
+  and synchronous GPU readback.
+
+## Open decisions for the owner
+
+- **Title hooks and addresses.** Hooks and patches (frame pacing,
+  resolution, bug fixes) need to name game functions. Recommendation: allow
+  function addresses and names in tracked hook configuration. Those are
+  functional facts. The content ban still covers code bytes, data, and
+  generated C.
+- **Porting from Vita3K.** The default is "reference only, write our own".
+  Decide case by case whether a small, attributed GPL port is acceptable,
+  for example USSE decode tables.

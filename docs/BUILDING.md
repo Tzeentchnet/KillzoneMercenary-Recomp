@@ -37,15 +37,15 @@ git status --short --branch
 git submodule status
 ```
 
-At this checkpoint, `third_party/vitarecomp` and
-`config/framework.commit` must both resolve to:
+`third_party/vitarecomp` and `config/framework.commit` must always resolve
+to the same commit. The current pin is:
 
 ```text
 0e81bb4b275435b2396b01a88c8d767d0104cc8b
 ```
 
-To reproduce the independently accepted revisions rather than the moving
-branch heads:
+To reproduce the independently accepted M0 revisions rather than the
+current pin:
 
 ```powershell
 git clone --recurse-submodules `

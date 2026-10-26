@@ -1,0 +1,53 @@
+From 8afc2c855e01c8635b76344f46f184f50901ad88 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 26 Oct 2026 01:55:25 +0000
+Subject: [PATCH 2/2] Pass git-clang-format's Python script, not its .bat
+ wrapper
+
+Windows quality gates failed on 0e81bb4 (run 40255206038) before any
+check ran: on the windows-2022 runner, Get-Command finds LLVM's
+git-clang-format.bat, and the gate hands that file to Python, which
+fails with "SyntaxError: invalid syntax". Any commit that changes C or
+C++ sources hits this, in the framework and in game repositories that
+reuse this script.
+
+Resolve a .bat/.cmd wrapper to the extensionless script beside it, the
+same file the wrapper runs, and fall through to the Visual Studio LLVM
+lookup when that script is absent.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019w9qd9hR6npnFTCKgz4eBT
+---
+ tools/ci/Test-StaticQuality.ps1 | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/tools/ci/Test-StaticQuality.ps1 b/tools/ci/Test-StaticQuality.ps1
+index 5f06051..46ebf4e 100644
+--- a/tools/ci/Test-StaticQuality.ps1
++++ b/tools/ci/Test-StaticQuality.ps1
+@@ -99,9 +99,20 @@ function Find-ClangFormatTools {
+     $clangFormat = Get-Command clang-format -ErrorAction SilentlyContinue
+     $gitClangFormat = Get-Command git-clang-format -ErrorAction SilentlyContinue
+     if ($null -ne $clangFormat -and $null -ne $gitClangFormat) {
+-        return [pscustomobject]@{
+-            ClangFormat = $clangFormat.Source
+-            GitClangFormat = $gitClangFormat.Source
++        # LLVM for Windows puts git-clang-format.bat on PATH; it only runs
++        # the extensionless Python script beside it, which is what Python
++        # must be given.
++        $gitClangFormatPath = $gitClangFormat.Source
++        if ($gitClangFormatPath -match '(?i)\.(?:bat|cmd)$') {
++            $gitClangFormatPath = Join-Path (
++                Split-Path -Parent $gitClangFormatPath
++            ) ([IO.Path]::GetFileNameWithoutExtension($gitClangFormatPath))
++        }
++        if (Test-Path -LiteralPath $gitClangFormatPath -PathType Leaf) {
++            return [pscustomobject]@{
++                ClangFormat = $clangFormat.Source
++                GitClangFormat = $gitClangFormatPath
++            }
+         }
+     }
+ 
+-- 
+2.43.0

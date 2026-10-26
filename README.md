@@ -2,48 +2,54 @@
 
 [![Windows quality gates](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/workflows/windows-quality.yml/badge.svg)](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/workflows/windows-quality.yml)
 
-An unofficial, source-only foundation for a native Windows x64 recompilation of
-the PlayStation Vita release of *Killzone Mercenary* (PCSA00107).
+An unofficial project to statically recompile the PlayStation Vita release of
+*Killzone Mercenary* (PCSA00107) into a native Windows x64 executable. The
+executable renders through Direct3D 12 or Vulkan and targets 30 fps or
+higher.
+
+**Goal and scope:** [docs/GOAL.md](docs/GOAL.md) ·
+**Milestones:** [docs/ROADMAP.md](docs/ROADMAP.md) ·
+**Where we are:** [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) ·
+**Contributor/agent rules:** [CLAUDE.md](CLAUDE.md)
+
+## How it works
+
+```text
+your lawful dump
+  -> external Vita3K (install/decrypt, post-link ELF dump only)
+  -> validated runtime-image manifest
+  -> armrecomp: ARM/Thumb -> C for every game module   ("decompile")
+  -> MSVC + vitarecomp runtime/HLE + this Windows host  ("recompile")
+  -> native kzmrecomp_host.exe --renderer=dx12|vulkan
+```
+
+The framework is [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp),
+a fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp).
+It provides the recompiler, the runtime/HLE, and the DX12/Vulkan backends.
+Vita3K is used only as an external content-preparation tool, behavioral
+oracle, and reference. It is not forked, extended, linked, or shipped.
 
 ## Current status
 
-**Gate 1 status: implemented and publicly/synthetically verified; privately
-unclosed.**
+**M0 foundation done. M1 (lift and link) and M2 (into title code) are in
+progress.** The game does not boot yet.
 
-The first foundation checkpoint remains complete and independently verified.
-This repository is pinned to
-[`vitarecomp@0e81bb4`](https://github.com/Tzeentchnet/vitarecomp/tree/0e81bb4b275435b2396b01a88c8d767d0104cc8b),
-which provides the static generated-C CPU pipeline, standalone runtime/HLE,
-shared GPU contract, and production DX12/Vulkan backends. The game repository
-provides a C++20 Windows x64 host, strict external-content validation,
-read-only `app0:` mounting, explicit renderer selection, and a bounded
-clear/triangle conformance scene.
+- All three runtime images lift to C that compiles cleanly: 96.37% of
+  executable bytes covered, 99.897% of emitted instructions translated,
+  3,770 explicit traps left.
+- The host, the content validation, and both renderer backends work, using a
+  self-test scene.
+- An opt-in local generated bundle (`KZMRECOMP_GENERATED_SOURCE_DIR`) builds
+  into the host, which can load, bind, and enter it through one strict
+  `vita_guest_call`. Public builds have no bundle and exit 9
+  (`title_not_implemented`) in title mode.
+- Next: the first run on a real local bundle, then fix the first strict
+  failure it reports (M2).
 
-Generated-module ABI v1 and `armrecomp compose` provide deterministic
-multi-module descriptors, a registry, and aggregate readiness reports.
-Structural report defects are pre-entry blockers; fully classified named
-traps are allowed only as the first explicit strict stop. Local provenance
-schema-v1 tools bind that evidence to the framework, raw manifest, commands,
-environment, and staged inventory.
+This repository contains no game data, generated title code, firmware, keys,
+or playable build.
 
-`KZMRECOMP_GENERATED_SOURCE_DIR` is empty by default. Public and hosted builds
-therefore contain no generated title bundle, and normal title mode retains
-`title_not_implemented` exit 9. An opt-in provenance-validated local bundle
-uses retained immutable module bytes without reopening paths, then passes the
-strict loader, binding, descriptor, stack, TLS, CPU, and one-use
-`vita_guest_call` boundary. Preparation failure, first strict failure, explicit
-exit, and clean return are distinct outcomes.
-
-No ignored local status record supplies successful private real-entry
-evidence. Gate 1 is not privately closed, and this status does not claim that
-the title boots or is playable. Startup HLE/GXM work remains deferred. The
-repository contains no game data, generated title code, firmware, keys, or
-playable build. See the
-[current architecture](docs/ARCHITECTURE.md),
-[project status](docs/PROJECT_STATUS.md), [verification
-report](docs/FOUNDATION_VERIFICATION.md) for the historical foundation, and
-the measurable
-[post-foundation roadmap](docs/ROADMAP.md).
+## Getting the source
 
 The reusable recompilation framework is pinned as the
 `third_party/vitarecomp` Git submodule. Clone recursively, or initialize it
@@ -127,24 +133,24 @@ An unavailable backend, adapter, or requested validation layer is an error.
 The host never falls back from Vulkan to DX12, from hardware to WARP, or to an
 emulator/JIT.
 
-## Migrated engineering material
+## Reference material
 
-- [Research record](docs/research/README.md) — curated findings, architecture
-  handoff, and asset-format facts with explicit evidence labels
-- [Current architecture](docs/ARCHITECTURE.md) — production boundaries,
-  private-data rules, test layers, and strict error/no-fallback policy
-- [Generated-source staging](tools/generated/Stage-GeneratedSources.ps1) —
-  content-aware local staging with a
-  [synthetic regression](tests/Test-StageGeneratedSources.ps1)
-- [Generated-source provenance](docs/generated-source-provenance.md) —
-  strict local sidecar/report/registry evidence and provenance-required
-  staging with public synthetic coverage
-- [Vita3K patch series](patches/vita3k/README.md) — generic post-link ELF
-  dumping against a pinned external checkout
-- [Migration manifest](MIGRATION.md) — per-source provenance, disposition,
-  deferred integration points, and validation evidence
-- [Post-foundation roadmap](docs/ROADMAP.md) — ordered, measurable gates from
-  strict title entry through local-only package generation
+- [Architecture](docs/ARCHITECTURE.md): process boundaries, pipeline, and
+  the target runtime design
+- [Native host](docs/NATIVE_HOST.md): options, exit codes, and the strict
+  title-entry path
+- [Generated-source provenance](docs/generated-source-provenance.md): how a
+  local generated bundle is validated and staged
+- [Research record](docs/research/README.md): curated CPU/loader findings
+  and asset-format facts from earlier work
+- [Generated-source staging](tools/generated/Stage-GeneratedSources.ps1)
+  and its [synthetic regression](tests/Test-StageGeneratedSources.ps1)
+- [Vita3K patch series](patches/vita3k/README.md): the frozen two-patch
+  post-link ELF dump for an external checkout
+- [Pending framework patches](patches/vitarecomp/README.md): fixes waiting
+  to land in the framework fork
+- Historical records: [migration manifest](MIGRATION.md) and
+  [M0 verification](docs/FOUNDATION_VERIFICATION.md)
 
 ## Repository layout
 
@@ -172,30 +178,12 @@ can be listed in ignored `config/private-roots.txt` or in the
 `KZM_RECOMP_PRIVATE_ROOTS` environment variable (semicolon-separated on
 Windows). The guard complements review; it is not a legal-content detector.
 
-## Gate 1 public validation
+## M0 evidence
 
-On 2026-10-25, the public synthetic Gate 1 surface passed these exact commands:
+Title-entry test commands and results are in
+[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md#title-entry-validation).
 
-```powershell
-ctest --test-dir out\build\vitarecomp-public-debug -C Debug `
-  --output-on-failure `
-  -R "^(emit|compose-generated-image-set|runtime|entry-state|loader-strict|module-set-binding)$"
-
-ctest --test-dir out\build\windows-x64-debug -C Debug `
-  --output-on-failure `
-  -R ("^(generated-provenance-synthetic|" +
-      "generated-bundle-build-synthetic|" +
-      "generated-bundle-adapter-unit|title-session-unit|" +
-      "native-host-unit)$")
-```
-
-The framework selection passed 6/6 tests and the game/host selection passed
-5/5 tests. All fixtures were public or synthetic. These local public results
-do not substitute for the still-missing private real-entry closure evidence.
-
-## Historical foundation evidence
-
-The accepted checkpoint used framework
+The accepted M0 checkpoint used framework
 `f3408e1ea73b724c7ba3a644633938c220f2cc2a` and game report revision
 `36fef0e94ab99d1fc6e1903f02a388013eb3585d`. The complete matrix and redacted
 private acceptance are recorded in

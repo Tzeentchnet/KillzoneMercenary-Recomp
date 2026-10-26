@@ -8,11 +8,12 @@ generated title bundle. An explicitly configured, provenance-validated local
 bundle is accepted only through the strict title preparation boundary
 described below.
 
-The accepted gitlink is
-`0e81bb4b275435b2396b01a88c8d767d0104cc8b`. The host self-test and content
-boundary are verified. **Gate 1 is implemented and publicly/synthetically
-verified, but remains privately unclosed.** No successful private real-entry
-evidence is recorded; title boot and playability are not claimed.
+The current framework pin is in `config/framework.commit`
+(`0e81bb4b275435b2396b01a88c8d767d0104cc8b`); M0 was accepted at
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The host self-test and content
+boundary are verified. The strict title-entry path below has public synthetic
+coverage but has not yet been run with a real local bundle; title boot and
+playability are not claimed.
 
 ## Modes and options
 
@@ -146,6 +147,7 @@ an entry-call count of zero, exactly one clean synthetic call, strict-stop and
 exit-request behavior, retained immutable bytes, and deterministic repeated
 process runs. The exact 6/6 framework and 5/5 game/host commands and results
 are recorded in
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md#gate-1-public-synthetic-validation).
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md#title-entry-validation).
 This boundary is not a claim that a private real entry has run, that the title
-boots, or that deferred HLE/GXM services exist.
+boots, or that later HLE/GXM services exist. Running it on a real local bundle
+is the next M2 step in [`ROADMAP.md`](ROADMAP.md#m2--into-title-code).

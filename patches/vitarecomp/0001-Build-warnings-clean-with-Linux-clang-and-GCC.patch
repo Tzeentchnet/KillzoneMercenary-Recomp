@@ -1,0 +1,525 @@
+From 94871573750ac330445a136f26f563fa9b769508 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 26 Oct 2026 01:54:05 +0000
+Subject: [PATCH 1/2] Build warnings-clean with Linux clang and GCC
+
+Linux cloud sessions could not build the runtime or most tests: clang
+and GCC -Werror tripped on dead code, false-positive uninitialized
+reads, always-false 64-bit overflow checks, and unchecked snprintf
+truncation. With warnings tolerated all 18 tests already passed, so the
+code was sound; this makes it build cleanly under -Werror on both.
+
+Two of the truncation warnings were real bugs:
+
+- nids.c stored names in 64-byte buffers, but vita-headers db/360 has
+  22 mangled C++ names longer than that (up to 96 bytes). They were
+  silently cut, so the emitted HLE symbol named a function nothing
+  implements. Buffers are now 128 bytes and an over-long name is left
+  unresolved instead of truncated; the emitter also falls back to the
+  vita_hle_nid_ spelling when a name does not fit its symbol buffer.
+- hle_fios.c path_join truncated overlay paths, which can name a
+  different file. It now reports truncation and the lookup fails.
+
+Other changes: -Wno-missing-field-initializers on GCC/clang, matching
+MSVC, because VITA_GPU_INIT deliberately initializes only the ABI
+size/version header; the unused kernel-arena allocator is marked
+maybe-unused; dead GPU validation helpers are removed.
+
+New test: nids (fails on the old loader at the 96-byte name).
+Verified: clang and GCC Release/Debug, zero warnings, 19/19 CTest.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019w9qd9hR6npnFTCKgz4eBT
+---
+ CMakeLists.txt             |  7 ++-
+ src/dispatch.c             |  2 +-
+ src/gpu/gpu_runtime.cpp    |  5 +--
+ src/gpu/gpu_validation.cpp | 24 ++---------
+ src/hle_fios.c             | 20 ++++++---
+ src/hle_threadmgr.c        | 12 +++++-
+ src/reloc.c                |  3 +-
+ tests/CMakeLists.txt       | 11 +++++
+ tests/test_nids.c          | 87 ++++++++++++++++++++++++++++++++++++++
+ tools/armrecomp/compose.c  |  6 +--
+ tools/armrecomp/emit.c     | 14 ++++--
+ tools/armrecomp/nids.c     | 36 +++++++++++++---
+ 12 files changed, 179 insertions(+), 48 deletions(-)
+ create mode 100644 tests/test_nids.c
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e3ecdea..8f5ae93 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -33,7 +33,10 @@ if(MSVC)
+     add_compile_options(/bigobj)
+     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+ else()
+-    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
++    # The versioned GPU ABI initializes only a struct's size/version header
++    # (VITA_GPU_INIT) and zero-fills the rest; MSVC has no equivalent warning.
++    add_compile_options(-Wall -Wextra -Wpedantic -Werror
++                        -Wno-missing-field-initializers)
+ endif()
+ 
+ # --- the runtime library ------------------------------------------------------
+@@ -112,7 +115,7 @@ function(vitarecomp_project_warnings target)
+         target_compile_options(${target} PRIVATE /W4 /WX /permissive-)
+     else()
+         target_compile_options(${target} PRIVATE
+-            -Wall -Wextra -Wpedantic -Werror
++            -Wall -Wextra -Wpedantic -Werror -Wno-missing-field-initializers
+         )
+     endif()
+ endfunction()
+diff --git a/src/dispatch.c b/src/dispatch.c
+index 0b6b346..0d37399 100644
+--- a/src/dispatch.c
++++ b/src/dispatch.c
+@@ -33,7 +33,7 @@ vita_dispatch_status vita_dispatch_init_checked(
+             return VITA_DISPATCH_ERROR_UNSORTED;
+     }
+     if (count) {
+-        if ((size_t)count > SIZE_MAX / sizeof(*copy))
++        if ((uint64_t)count * sizeof(*copy) > SIZE_MAX)
+             return VITA_DISPATCH_ERROR_NO_MEMORY;
+         copy = (vita_dispatch_entry *)malloc((size_t)count * sizeof(*copy));
+         if (!copy) return VITA_DISPATCH_ERROR_NO_MEMORY;
+diff --git a/src/gpu/gpu_runtime.cpp b/src/gpu/gpu_runtime.cpp
+index fc1e4d2..e556fc8 100644
+--- a/src/gpu/gpu_runtime.cpp
++++ b/src/gpu/gpu_runtime.cpp
+@@ -2076,7 +2076,7 @@ Status DeviceCore::command_barriers(
+         if (!status.ok()) {
+             return status;
+         }
+-        constexpr vita_gpu_resource_state known_states =
++        static constexpr vita_gpu_resource_state known_states =
+             VITA_GPU_RESOURCE_STATE_COMMON |
+             VITA_GPU_RESOURCE_STATE_COPY_SOURCE |
+             VITA_GPU_RESOURCE_STATE_COPY_DEST |
+@@ -2090,8 +2090,7 @@ Status DeviceCore::command_barriers(
+             VITA_GPU_RESOURCE_STATE_DEPTH_WRITE |
+             VITA_GPU_RESOURCE_STATE_PRESENT;
+         const auto structurally_valid_state =
+-            [known_states](vita_gpu_resource_state state,
+-                           bool allow_undefined) {
++            [](vita_gpu_resource_state state, bool allow_undefined) {
+                 if ((state & ~known_states) != 0 ||
+                     (state == VITA_GPU_RESOURCE_STATE_UNDEFINED &&
+                      !allow_undefined)) {
+diff --git a/src/gpu/gpu_validation.cpp b/src/gpu/gpu_validation.cpp
+index 3712ccd..c9f3448 100644
+--- a/src/gpu/gpu_validation.cpp
++++ b/src/gpu/gpu_validation.cpp
+@@ -21,19 +21,12 @@ constexpr vita_gpu_texture_usage kTextureUsage =
+     VITA_GPU_TEXTURE_COPY_SOURCE | VITA_GPU_TEXTURE_COPY_DEST;
+ constexpr vita_gpu_resource_state kResourceStates =
+     VITA_GPU_RESOURCE_STATE_COMMON | VITA_GPU_RESOURCE_STATE_COPY_SOURCE |
+-    VITA_GPU_RESOURCE_STATE_COPY_DEST |
+-    VITA_GPU_RESOURCE_STATE_VERTEX_BUFFER |
++    VITA_GPU_RESOURCE_STATE_COPY_DEST | VITA_GPU_RESOURCE_STATE_VERTEX_BUFFER |
+     VITA_GPU_RESOURCE_STATE_INDEX_BUFFER |
+     VITA_GPU_RESOURCE_STATE_CONSTANT_BUFFER |
+-    VITA_GPU_RESOURCE_STATE_SHADER_READ |
+-    VITA_GPU_RESOURCE_STATE_SHADER_WRITE |
+-    VITA_GPU_RESOURCE_STATE_RENDER_TARGET |
+-    VITA_GPU_RESOURCE_STATE_DEPTH_READ |
+-    VITA_GPU_RESOURCE_STATE_DEPTH_WRITE |
+-    VITA_GPU_RESOURCE_STATE_PRESENT;
+-constexpr vita_gpu_shader_flags kShaderFlags =
+-    VITA_GPU_SHADER_DEBUG | VITA_GPU_SHADER_DISABLE_OPTIMIZE |
+-    VITA_GPU_SHADER_WARNINGS_AS_ERROR;
++    VITA_GPU_RESOURCE_STATE_SHADER_READ | VITA_GPU_RESOURCE_STATE_SHADER_WRITE |
++    VITA_GPU_RESOURCE_STATE_RENDER_TARGET | VITA_GPU_RESOURCE_STATE_DEPTH_READ |
++    VITA_GPU_RESOURCE_STATE_DEPTH_WRITE | VITA_GPU_RESOURCE_STATE_PRESENT;
+ constexpr vita_gpu_shader_stage_flags kShaderStages = VITA_GPU_SHADER_STAGE_ALL;
+ 
+ Status invalid(std::string message) {
+@@ -44,10 +37,6 @@ bool valid_backend(vita_gpu_backend value) {
+     return value == VITA_GPU_BACKEND_DX12 || value == VITA_GPU_BACKEND_VULKAN;
+ }
+ 
+-bool valid_queue(vita_gpu_queue_type value) {
+-    return value >= VITA_GPU_QUEUE_GRAPHICS && value <= VITA_GPU_QUEUE_COPY;
+-}
+-
+ bool valid_format(vita_gpu_format value) {
+     return value > VITA_GPU_FORMAT_UNKNOWN &&
+            value <= VITA_GPU_FORMAT_BC7_SRGB;
+@@ -105,11 +94,6 @@ bool valid_optional_string(const char *text, std::size_t maximum = 4096) {
+     return false;
+ }
+ 
+-bool valid_required_string(const char *text, std::size_t maximum = 4096) {
+-    return text != nullptr && text[0] != '\0' &&
+-           valid_optional_string(text, maximum);
+-}
+-
+ template <typename T>
+ Status validate_nested(const T &descriptor, std::string_view name) {
+     return validate_struct(&descriptor, sizeof(T), name);
+diff --git a/src/hle_fios.c b/src/hle_fios.c
+index 3643da8..bf66c5c 100644
+--- a/src/hle_fios.c
++++ b/src/hle_fios.c
+@@ -219,11 +219,15 @@ static const char *path_under(const char *path, const char *prefix) {
+     return path[n] == '/' ? path + n + 1 : NULL;
+ }
+ 
+-/* `rest` under `root`, in the one spelling. */
+-static void path_join(char *out, size_t cap, const char *root, const char *rest) {
++/* `rest` under `root`, in the one spelling. Returns 0 when the result does
++ * not fit: a truncated path names a different file. */
++static int path_join(char *out, size_t cap, const char *root,
++                     const char *rest) {
+     const size_t n = strlen(root);
+     const int bare = !n || !*rest || root[n - 1] == ':' || root[n - 1] == '/';
+-    snprintf(out, cap, "%s%s%s", root, bare ? "" : "/", rest);
++    const int written =
++        snprintf(out, cap, "%s%s%s", root, bare ? "" : "/", rest);
++    return written >= 0 && (size_t)written < cap;
+ }
+ 
+ static int host_exists(const char *gpath, char *hpath, size_t cap) {
+@@ -265,7 +269,10 @@ static int locate(const char *named, where *w, int for_write) {
+             if (!o->used || o->order != order) continue;
+             const char *rest = path_under(gpath, o->dst);
+             if (!rest) continue;
+-            path_join(moved, sizeof moved, o->src, rest);
++            if (!path_join(moved, sizeof moved, o->src, rest)) {
++                memset(w, 0, sizeof(*w));
++                return 0;
++            }
+             if (o->type == SCE_FIOS_OVERLAY_OPAQUE || (for_write && o->type == SCE_FIOS_OVERLAY_WRITABLE)) {
+                 locate_plain(moved, w, !for_write);
+                 return w->kind != 0;
+@@ -775,7 +782,10 @@ void vita_hle_sceFiosOverlayResolveSync(void) {
+             if (!o->used || o->order != order) continue;
+             const char *rest = path_under(canon, o->dst);
+             if (!rest) continue;
+-            path_join(moved, sizeof moved, o->src, rest);
++            if (!path_join(moved, sizeof moved, o->src, rest)) {
++                r0 = SCE_FIOS_ERROR_BAD_ARG;
++                return;
++            }
+             if (o->type != SCE_FIOS_OVERLAY_OPAQUE && !(for_write && o->type == SCE_FIOS_OVERLAY_WRITABLE)) {
+                 if (for_write) continue;
+                 locate_plain(moved, &w, 1);
+diff --git a/src/hle_threadmgr.c b/src/hle_threadmgr.c
+index bf2df6a..697bebb 100644
+--- a/src/hle_threadmgr.c
++++ b/src/hle_threadmgr.c
+@@ -256,11 +256,19 @@ static uint32_t kalloc_aligned(uint32_t requested, uint32_t alignment) {
+     return 0;
+ }
+ 
+-static uint32_t kalloc(uint32_t requested) {
++/* The kernel-object arena allocator has no caller since TLS blocks moved to
++ * their own arena; it is kept for kernel objects that need guest memory. */
++#if defined(__GNUC__) || defined(__clang__)
++#define KERNEL_ARENA_UNUSED __attribute__((unused))
++#else
++#define KERNEL_ARENA_UNUSED
++#endif
++
++KERNEL_ARENA_UNUSED static uint32_t kalloc(uint32_t requested) {
+     return kalloc_aligned(requested, 16u);
+ }
+ 
+-static void kfree(uint32_t address) {
++KERNEL_ARENA_UNUSED static void kfree(uint32_t address) {
+     for (uint32_t i = 0; i < g_kchunk_count; i++) {
+         if (g_kchunks[i].address != address || !g_kchunks[i].used) continue;
+         g_kchunks[i].used = 0;
+diff --git a/src/reloc.c b/src/reloc.c
+index b6dcbc7..5a90b17 100644
+--- a/src/reloc.c
++++ b/src/reloc.c
+@@ -136,7 +136,8 @@ static int push(
+     if (table->n == table->cap) {
+         if (table->cap > UINT32_MAX / 2u) return 1;
+         capacity = table->cap ? table->cap * 2u : 4096u;
+-        if ((size_t)capacity > SIZE_MAX / sizeof(*entries)) return 1;
++        if ((uint64_t)capacity * sizeof(*entries) > SIZE_MAX)
++            return 1;
+         entries = (vita_reloc_entry *)realloc(
+             table->v, (size_t)capacity * sizeof(*entries));
+         if (!entries) return 1;
+diff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt
+index 33647ab..961fb9c 100644
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -57,6 +57,17 @@ target_include_directories(test_reloc PRIVATE
+ target_compile_options(test_reloc PRIVATE -UNDEBUG)
+ add_test(NAME reloc COMMAND test_reloc)
+ 
++add_executable(test_nids
++    test_nids.c
++    ${CMAKE_SOURCE_DIR}/tools/armrecomp/nids.c
++)
++target_include_directories(test_nids PRIVATE
++    ${CMAKE_SOURCE_DIR}/tools/armrecomp
++)
++target_compile_options(test_nids PRIVATE -UNDEBUG)
++file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/nids-db)
++add_test(NAME nids COMMAND test_nids ${CMAKE_CURRENT_BINARY_DIR}/nids-db)
++
+ add_executable(test_discover
+     test_discover.c
+     ${CMAKE_SOURCE_DIR}/tools/armrecomp/analyze.c
+diff --git a/tests/test_nids.c b/tests/test_nids.c
+new file mode 100644
+index 0000000..62fae4e
+--- /dev/null
++++ b/tests/test_nids.c
+@@ -0,0 +1,87 @@
++/* test_nids.c — the NID database loader, on a synthetic database.
++ *
++ * The real database (vita-headers db/360) carries mangled C++ names up to 96
++ * bytes long. A name that does not fit the loader's buffer must come back
++ * unresolved rather than truncated: a truncated name becomes an HLE symbol
++ * that no implementation defines. No game data.
++ */
++
++#include "nids.h"
++
++#include <assert.h>
++#include <stdio.h>
++#include <string.h>
++
++#ifdef NDEBUG
++#error "tests must be built with asserts enabled (NDEBUG is defined)"
++#endif
++
++#define LIB_NID 0x12345678u
++#define FN_96 0x00000096u
++#define FN_127 0x00000127u
++#define FN_128 0x00000128u
++#define VAR_127 0x10000127u
++
++static void make_name(char *dst, size_t length, char fill) {
++    dst[0] = '_';
++    memset(dst + 1, fill, length - 1);
++    dst[length] = '\0';
++}
++
++int main(int argc, char **argv) {
++    assert(argc == 2);
++    char path[1024];
++    int n = snprintf(path, sizeof(path), "%s/test.yml", argv[1]);
++    assert(n > 0 && (size_t)n < sizeof(path));
++
++    char name96[97], name127[128], name128[129], var127[128];
++    make_name(name96, 96, 'a');
++    make_name(name127, 127, 'b');
++    make_name(name128, 128, 'c');
++    make_name(var127, 127, 'v');
++
++    FILE *f = fopen(path, "w");
++    assert(f);
++    fprintf(f,
++            "version: 2\n"
++            "firmware: 3.60\n"
++            "modules:\n"
++            "  SceTest:\n"
++            "    nid: 0x00000001\n"
++            "    libraries:\n"
++            "      SceTestLib:\n"
++            "        kernel: false\n"
++            "        nid: 0x%08X\n"
++            "        functions:\n"
++            "          %s: 0x%08X\n"
++            "          %s: 0x%08X\n"
++            "          %s: 0x%08X\n"
++            "        variables:\n"
++            "          %s: 0x%08X\n",
++            LIB_NID, name96, FN_96, name127, FN_127, name128, FN_128, var127,
++            VAR_127);
++    fclose(f);
++
++    int files = 0, entries = 0;
++    nid_db *db = nid_db_load(argv[1], &files, &entries);
++    assert(db);
++    assert(files >= 1);
++
++    assert(strcmp(nid_lib_name(db, LIB_NID), "SceTestLib") == 0);
++
++    /* Names up to the buffer limit come back whole. */
++    const char *got = nid_func_name(db, LIB_NID, FN_96);
++    assert(got && strcmp(got, name96) == 0);
++    got = nid_func_name(db, LIB_NID, FN_127);
++    assert(got && strcmp(got, name127) == 0);
++    got = nid_var_name(db, LIB_NID, VAR_127);
++    assert(got && strcmp(got, var127) == 0);
++
++    /* One byte over is unresolved, never a cut-off prefix. */
++    assert(nid_func_name(db, LIB_NID, FN_128) == NULL);
++
++    nid_db_free(db);
++    remove(path);
++    printf("nids: long names resolve whole or not at all\n");
++    return 0;
++}
+diff --git a/tools/armrecomp/compose.c b/tools/armrecomp/compose.c
+index a341044..d27e7b6 100644
+--- a/tools/armrecomp/compose.c
++++ b/tools/armrecomp/compose.c
+@@ -954,7 +954,7 @@ static int ac_parse_sidecar(const char *path, const jvalue *root,
+         "strictUnsupported", "pcInstrumentation", "unclassifiedTrapCount"
+     };
+     const jvalue *object, *items;
+-    uint32_t value, declared;
++    uint32_t value = 0, declared = 0;
+     size_t i;
+ 
+     memset(module, 0, sizeof(*module));
+@@ -1359,9 +1359,9 @@ static int ac_parse_report(const char *path, const jvalue *root,
+         "unit", "functions", "instructions", "firstKey", "lastKey"
+     };
+     const jvalue *object, *items;
+-    uint32_t schema;
++    uint32_t schema = 0;
+     size_t i;
+-    int strict;
++    int strict = 0;
+ 
+     memset(report, 0, sizeof(*report));
+     if (jv_exact(path, "generation report", root, root_names, 13,
+diff --git a/tools/armrecomp/emit.c b/tools/armrecomp/emit.c
+index 249a4e7..98bca05 100644
+--- a/tools/armrecomp/emit.c
++++ b/tools/armrecomp/emit.c
+@@ -583,8 +583,12 @@ static void trap(FILE *f, const arm_insn *in, const char *why) {
+ static void hle_symbol(char *dst, size_t cap, const nid_db *db,
+                        const vm_stub *s) {
+     const char *n = nid_func_name(db, s->lib_nid, s->func_nid);
+-    if (n) snprintf(dst, cap, "vita_hle_%s", n);
+-    else   snprintf(dst, cap, "vita_hle_nid_%08X", s->func_nid);
++    /* A name too long for the symbol buffer takes the NID spelling: a
++     * truncated name is a symbol no implementation defines. */
++    if (n && strlen("vita_hle_") + strlen(n) < cap)
++        snprintf(dst, cap, "vita_hle_%s", n);
++    else
++        snprintf(dst, cap, "vita_hle_nid_%08X", s->func_nid);
+ }
+ 
+ static void import_target_symbol(char *dst, size_t cap,
+@@ -607,8 +611,10 @@ static void var_symbol(char *dst, size_t cap, const nid_db *db,
+         return;
+     }
+     const char *n = nid_var_name(db, v->lib_nid, v->var_nid);
+-    if (n) snprintf(dst, cap, "vita_var_%s", n);
+-    else   snprintf(dst, cap, "vita_var_nid_%08X", v->var_nid);
++    if (n && strlen("vita_var_") + strlen(n) < cap)
++        snprintf(dst, cap, "vita_var_%s", n);
++    else
++        snprintf(dst, cap, "vita_var_nid_%08X", v->var_nid);
+ }
+ 
+ /* Every site in the code that an imported variable's address goes into,
+diff --git a/tools/armrecomp/nids.c b/tools/armrecomp/nids.c
+index 8b1a7c5..8762814 100644
+--- a/tools/armrecomp/nids.c
++++ b/tools/armrecomp/nids.c
+@@ -28,17 +28,32 @@
+ #  include <dirent.h>
+ #endif
+ 
++/* Long enough for the longest mangled C++ name in the database (96 bytes at
++ * db/360). A longer name is not truncated: a cut-off name would emit an HLE
++ * symbol nothing implements, so the entry is left unnamed instead and its
++ * import falls back to the vita_hle_nid_ spelling. */
++#define NID_NAME_MAX 128
++
+ typedef struct {
+     uint32_t lib_nid;
+     uint32_t func_nid;
+-    char     name[64];
++    char name[NID_NAME_MAX];
+ } nid_entry;
+ 
+ typedef struct {
+     uint32_t lib_nid;
+-    char     name[64];
++    char name[NID_NAME_MAX];
+ } lib_entry;
+ 
++/* Copy a whole name or nothing. Returns 0 when it does not fit. */
++static int copy_name(char *dst, size_t cap, const char *name) {
++    size_t n = strlen(name);
++    if (n >= cap)
++        return 0;
++    memcpy(dst, name, n + 1);
++    return 1;
++}
++
+ struct nid_db {
+     nid_entry *funcs;
+     size_t     nfuncs, cfuncs;
+@@ -49,6 +64,8 @@ struct nid_db {
+ };
+ 
+ static void add_func(nid_db *db, uint32_t lib, uint32_t fn, const char *name) {
++    if (strlen(name) >= NID_NAME_MAX)
++        return;
+     if (db->nfuncs == db->cfuncs) {
+         db->cfuncs = db->cfuncs ? db->cfuncs * 2 : 4096;
+         db->funcs = (nid_entry *)realloc(db->funcs, db->cfuncs * sizeof(nid_entry));
+@@ -56,10 +73,12 @@ static void add_func(nid_db *db, uint32_t lib, uint32_t fn, const char *name) {
+     nid_entry *e = &db->funcs[db->nfuncs++];
+     e->lib_nid = lib;
+     e->func_nid = fn;
+-    snprintf(e->name, sizeof(e->name), "%s", name);
++    (void)copy_name(e->name, sizeof(e->name), name);
+ }
+ 
+ static void add_var(nid_db *db, uint32_t lib, uint32_t var, const char *name) {
++    if (strlen(name) >= NID_NAME_MAX)
++        return;
+     if (db->nvars == db->cvars) {
+         db->cvars = db->cvars ? db->cvars * 2 : 256;
+         db->vars = (nid_entry *)realloc(db->vars, db->cvars * sizeof(nid_entry));
+@@ -67,10 +86,12 @@ static void add_var(nid_db *db, uint32_t lib, uint32_t var, const char *name) {
+     nid_entry *e = &db->vars[db->nvars++];
+     e->lib_nid = lib;
+     e->func_nid = var;
+-    snprintf(e->name, sizeof(e->name), "%s", name);
++    (void)copy_name(e->name, sizeof(e->name), name);
+ }
+ 
+ static void add_lib(nid_db *db, uint32_t lib, const char *name) {
++    if (strlen(name) >= NID_NAME_MAX)
++        return;
+     for (size_t i = 0; i < db->nlibs; i++)
+         if (db->libs[i].lib_nid == lib) return;
+     if (db->nlibs == db->clibs) {
+@@ -79,7 +100,7 @@ static void add_lib(nid_db *db, uint32_t lib, const char *name) {
+     }
+     lib_entry *e = &db->libs[db->nlibs++];
+     e->lib_nid = lib;
+-    snprintf(e->name, sizeof(e->name), "%s", name);
++    (void)copy_name(e->name, sizeof(e->name), name);
+ }
+ 
+ /* Count leading spaces, which is the only structural signal in the file. */
+@@ -115,7 +136,7 @@ static void parse_file(nid_db *db, const char *path, int *entries) {
+     if (!f) return;
+ 
+     char line[512];
+-    char cur_lib_name[64] = {0};
++    char cur_lib_name[NID_NAME_MAX] = {0};
+     uint32_t cur_lib_nid = 0;
+     int in_functions = 0;
+     int in_variables = 0;
+@@ -133,7 +154,8 @@ static void parse_file(nid_db *db, const char *path, int *entries) {
+             if (strcmp(key, "functions") == 0) { in_functions = 1; in_variables = 0; continue; }
+             if (strcmp(key, "variables") == 0) { in_variables = 1; in_functions = 0; continue; }
+             if (lib_indent >= 0 && ind == lib_indent) {
+-                snprintf(cur_lib_name, sizeof(cur_lib_name), "%s", key);
++                if (!copy_name(cur_lib_name, sizeof(cur_lib_name), key))
++                    cur_lib_name[0] = '\0';
+                 cur_lib_nid = 0;
+                 in_functions = 0;
+                 in_variables = 0;
+-- 
+2.43.0

@@ -8,6 +8,17 @@ title addresses, generated code, user-data paths, or game-specific matching.
 Vita3K remains a separately built and executed extraction/oracle tool; neither
 patch makes it part of the native host or the production CPU path.
 
+## Scope: frozen
+
+This series is complete and frozen. Vita3K is an external oracle and
+reference for this project, not something we fork or extend (see
+[`docs/GOAL.md`](../../docs/GOAL.md#vita3ks-role-oracle-and-reference-only)).
+Do not rebase these patches, port them to newer Vita3K revisions, or add
+features unless the extraction itself breaks. A new patch is acceptable only
+as an out-of-process oracle instrument that serves a current milestone, and
+needs owner approval. Prefer Vita3K's existing options, such as import
+logging, over patching.
+
 ## Pinned base
 
 - Repository: <https://github.com/Vita3K/Vita3K>
