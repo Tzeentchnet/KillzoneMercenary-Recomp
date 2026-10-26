@@ -16,7 +16,7 @@ No ignored local status file records a successful private real-entry attempt.
 
 | Component | Accepted revision | State |
 |---|---|---|
-| Framework `Tzeentchnet/vitarecomp` | `0e81bb4b275435b2396b01a88c8d767d0104cc8b` | Local Gate 1 commit; push and framework CI pending |
+| Framework `Tzeentchnet/vitarecomp` | `0e81bb4b275435b2396b01a88c8d767d0104cc8b` | `main`, clean and pushed; framework CI in progress |
 | Game verification report | `36fef0e94ab99d1fc6e1903f02a388013eb3585d` | `main`, clean, pushed, game CI green |
 | Game framework gitlink | `0e81bb4b275435b2396b01a88c8d767d0104cc8b` | Matches `config/framework.commit` |
 | Preserved upstream framework baseline | `6ed4a5c59045706292c8ec03dfe5207ecc4033a4` | Tagged `upstream-start-6ed4a5c5` |
