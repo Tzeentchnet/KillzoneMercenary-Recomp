@@ -94,11 +94,11 @@ swapchain, device, VFS/runtime, and window resources in dependency order.
 ## Title boundary
 
 Valid content in non-self-test mode is validated and mounted, then exits with
-code 9. This is intentional. Title execution cannot become ready until
-generated-source provenance, complete strict import registration, and the
-required title HLE/GXM preconditions are implemented and tested. There is no
-success-shaped title entry point in this scaffold.
+code 9. This is intentional at M0. Title execution needs the generated code
+linked into the host (M1) and the boot sequence and title memory map (M2).
+There is no success-shaped title entry point in this scaffold.
 
 The complete production boundary is in
-[`ARCHITECTURE.md`](ARCHITECTURE.md); the gates that may eventually replace
-exit 9 are ordered in [`ROADMAP.md`](ROADMAP.md).
+[`ARCHITECTURE.md`](ARCHITECTURE.md). Milestone M2 in
+[`ROADMAP.md`](ROADMAP.md#m2--into-title-code) replaces exit 9 with the real
+boot sequence.

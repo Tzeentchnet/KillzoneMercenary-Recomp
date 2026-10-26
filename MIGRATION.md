@@ -2,6 +2,10 @@
 
 # Prior AOT material migration
 
+> **Historical record.** This manifest documents the one-time curation of
+> earlier work and is complete. It is not a task list. Current work is in
+> [docs/ROADMAP.md](docs/ROADMAP.md).
+
 This manifest records the curated migration from the verified 2026-10-25
 `killzone-aot` snapshot. The source branch used Vita3K commit
 `ee50eb8644b4184996047f04406486281586935b` as its merge base and ended at

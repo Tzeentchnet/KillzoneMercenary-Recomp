@@ -2,29 +2,50 @@
 
 [![Windows quality gates](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/workflows/windows-quality.yml/badge.svg)](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/workflows/windows-quality.yml)
 
-An unofficial, source-only foundation for a native Windows x64 recompilation of
-the PlayStation Vita release of *Killzone Mercenary* (PCSA00107).
+An unofficial project to statically recompile the PlayStation Vita release of
+*Killzone Mercenary* (PCSA00107) into a native Windows x64 executable. The
+executable renders through Direct3D 12 or Vulkan and targets 30 fps or
+higher.
+
+**Goal and scope:** [docs/GOAL.md](docs/GOAL.md) ·
+**Milestones:** [docs/ROADMAP.md](docs/ROADMAP.md) ·
+**Where we are:** [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) ·
+**Contributor/agent rules:** [CLAUDE.md](CLAUDE.md)
+
+## How it works
+
+```text
+your lawful dump
+  -> external Vita3K (install/decrypt, post-link ELF dump only)
+  -> validated runtime-image manifest
+  -> armrecomp: ARM/Thumb -> C for every game module   ("decompile")
+  -> MSVC + vitarecomp runtime/HLE + this Windows host  ("recompile")
+  -> native kzmrecomp_host.exe --renderer=dx12|vulkan
+```
+
+The framework is [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp),
+a fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp).
+It provides the recompiler, the runtime/HLE, and the DX12/Vulkan backends.
+Vita3K is used only as an external content-preparation tool, behavioral
+oracle, and reference. It is not forked, extended, linked, or shipped.
 
 ## Current status
 
-The first foundation checkpoint is complete and independently verified. This
-repository is pinned to
-[`vitarecomp@f3408e1`](https://github.com/Tzeentchnet/vitarecomp/tree/f3408e1ea73b724c7ba3a644633938c220f2cc2a),
-which provides the static generated-C CPU pipeline, standalone runtime/HLE,
-shared GPU contract, and production DX12/Vulkan backends. The game repository
-provides a C++20 Windows x64 host, strict external-content validation,
-read-only `app0:` mounting, explicit renderer selection, and a bounded
-clear/triangle conformance scene.
+**M0 foundation done. M1 (lift and link) is in progress.** The game does not
+boot yet.
 
-Title execution remains deliberately disabled. No translated Killzone code is
-loaded or called; normal title mode exits 9 at the explicit
-`title_not_implemented` boundary. The accepted CPU measurement still contains
-explicit traps, and startup import/HLE/GXM preconditions are not yet closed.
+- All three runtime images lift to C that compiles cleanly: 96.37% of
+  executable bytes covered, 99.897% of emitted instructions translated,
+  3,770 explicit traps left.
+- The host, the content validation, and both renderer backends work, using a
+  self-test scene.
+- Next: link the generated code into the host and enter title code (M2).
+  Title mode currently exits 9 (`title_not_implemented`).
+
 This repository contains no game data, generated title code, firmware, keys,
-or playable build. See the [current architecture](docs/ARCHITECTURE.md),
-[project status](docs/PROJECT_STATUS.md), [verification
-report](docs/FOUNDATION_VERIFICATION.md), and measurable
-[post-foundation roadmap](docs/ROADMAP.md).
+or playable build.
+
+## Getting the source
 
 The reusable recompilation framework is pinned as the
 `third_party/vitarecomp` Git submodule. Clone recursively, or initialize it
@@ -103,21 +124,18 @@ An unavailable backend, adapter, or requested validation layer is an error.
 The host never falls back from Vulkan to DX12, from hardware to WARP, or to an
 emulator/JIT.
 
-## Migrated engineering material
+## Reference material
 
-- [Research record](docs/research/README.md) — curated findings, architecture
-  handoff, and asset-format facts with explicit evidence labels
-- [Current architecture](docs/ARCHITECTURE.md) — production boundaries,
-  private-data rules, test layers, and strict error/no-fallback policy
-- [Generated-source staging](tools/generated/Stage-GeneratedSources.ps1) —
-  content-aware local staging with a
-  [synthetic regression](tests/Test-StageGeneratedSources.ps1)
-- [Vita3K patch series](patches/vita3k/README.md) — generic post-link ELF
-  dumping against a pinned external checkout
-- [Migration manifest](MIGRATION.md) — per-source provenance, disposition,
-  deferred integration points, and validation evidence
-- [Post-foundation roadmap](docs/ROADMAP.md) — ordered, measurable gates from
-  strict title entry through local-only package generation
+- [Architecture](docs/ARCHITECTURE.md): process boundaries, pipeline, and
+  the target runtime design
+- [Research record](docs/research/README.md): curated CPU/loader findings
+  and asset-format facts from earlier work
+- [Generated-source staging](tools/generated/Stage-GeneratedSources.ps1)
+  and its [synthetic regression](tests/Test-StageGeneratedSources.ps1)
+- [Vita3K patch series](patches/vita3k/README.md): the frozen two-patch
+  post-link ELF dump for an external checkout
+- Historical records: [migration manifest](MIGRATION.md) and
+  [M0 verification](docs/FOUNDATION_VERIFICATION.md)
 
 ## Repository layout
 
@@ -145,9 +163,9 @@ can be listed in ignored `config/private-roots.txt` or in the
 `KZM_RECOMP_PRIVATE_ROOTS` environment variable (semicolon-separated on
 Windows). The guard complements review; it is not a legal-content detector.
 
-## Verified public evidence
+## M0 evidence
 
-The accepted checkpoint used framework
+The accepted M0 checkpoint used framework
 `f3408e1ea73b724c7ba3a644633938c220f2cc2a` and game report revision
 `36fef0e94ab99d1fc6e1903f02a388013eb3585d`. The complete matrix and redacted
 private acceptance are recorded in

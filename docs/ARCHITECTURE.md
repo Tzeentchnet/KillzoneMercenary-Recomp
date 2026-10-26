@@ -1,22 +1,21 @@
-# Current architecture
+# Architecture
 
-This document describes the accepted first-checkpoint architecture at game
-revision `36fef0e94ab99d1fc6e1903f02a388013eb3585d` and framework revision
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The framework revision is the
-exact `third_party/vitarecomp` gitlink and the value in
-`config/framework.commit`.
+This document describes how the native *Killzone Mercenary* build is put
+together: what exists at the framework pin
+`f3408e1ea73b724c7ba3a644633938c220f2cc2a`, and where the remaining pieces
+go on the way to the goal in [GOAL.md](GOAL.md). Milestone order is in
+[ROADMAP.md](ROADMAP.md).
 
-The checkpoint is a verified native foundation, not a title-boot or
-playability milestone. Non-self-test title mode deliberately exits with code
-9 before loading or calling generated Killzone code.
+At M0, title mode deliberately exits with code 9 before calling generated
+code. M2 replaces that boundary with the real boot sequence.
 
 ## Repository and process boundaries
 
 | Boundary | Owns | Must not own |
 |---|---|---|
-| [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/f3408e1ea73b724c7ba3a644633938c220f2cc2a) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
+| [`Tzeentchnet/vitarecomp`](https://github.com/Tzeentchnet/vitarecomp/tree/f3408e1ea73b724c7ba3a644633938c220f2cc2a) (fork of [`sp00nznet/vitarecomp`](https://github.com/sp00nznet/vitarecomp)) | Static ARM/Thumb analysis and generated-C emission; CPU/memory/dispatch runtime; title-neutral HLE and VFS; shared GPU C contract; DX12 and Vulkan backends; public tests | Killzone policy, private title content, generated Killzone source, or an embedded emulator |
 | This game repository | PCSA00107 policy and configuration; native Windows host; strict content/manifest validation; external-content workflow; local generated-source staging; title-specific compatibility work | Retail data, keys, generated title code, Vita3K source/runtime, or a second production recompiler |
-| External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, and optional behavioral-oracle observations | Production CPU execution, native-host services, renderer fallback, or a runtime dependency |
+| External Vita3K checkout/process | Lawful installation/decryption, post-link runtime ELF extraction, behavioral-oracle observations (screenshots, import logs), and source reading as reference | Production CPU execution, native-host services, renderer fallback, a runtime dependency, or project feature work (no fork) |
 | Ignored local private roots | User-supplied archive, portable Vita3K state, runtime images, manifests, reports, captures, and generated code | Git history, hosted CI, published source archives, or shared build artifacts |
 
 Vita3K is therefore an extraction/oracle tool only. The native application
@@ -57,8 +56,8 @@ read-only VFS/PSARC behavior. Unsupported imports return a named error or trap;
 they never return success merely to continue execution.
 
 The guest `sceGxm` bridge, GXP/USSE translation, media, input, savedata UI and
-policy, networking, and title-specific compatibility remain deferred even
-though the underlying native renderer contract is implemented.
+policy, and title-specific compatibility are not implemented yet (M3–M5).
+Networking only needs to report "offline" correctly.
 
 ### Native host
 
@@ -68,9 +67,9 @@ runtime/VFS creation, renderer selection, and deterministic teardown. A valid
 external image set is mounted read-only as `app0:` only after path, range,
 metadata, size, and hash checks pass.
 
-The only successful execution mode at this checkpoint is the public
-clear/triangle self-test. Valid title content without `--self-test` reaches
-the explicit `title_not_implemented` boundary and exits 9.
+At M0 the only successful execution mode is the public clear/triangle
+self-test. Valid title content without `--self-test` reaches the explicit
+`title_not_implemented` boundary and exits 9 until M2.
 
 ### Shared GPU contract
 
@@ -85,14 +84,50 @@ DXC `1.8.2505.32` is pinned. The same source is compiled to DXIL and SPIR-V.
 DX12 WARP is the required software conformance path. Vulkan requires an
 available 1.3 loader/ICD and reports absence explicitly.
 
-## Status at the checkpoint
+## Target runtime design
+
+These are the pieces still to be built, and where each one goes.
+
+```text
+generated C (all modules, one dispatch table)
+  -> vitarecomp runtime: memory, CPU state, scheduler, HLE registry
+       |-- kernel / threads / sync / sysmem / io / fios2 / ult   (exists, grows run-driven)
+       |-- sceGxm bridge -> scene/draw translation -> GPU contract     (M3)
+       |       '-- GXP parse + reflect -> USSE -> HLSL -> DXC -> DXIL/SPIR-V
+       |-- sceDisplay -> swapchain present, vblank pacing              (M3)
+       |-- sceCtrl / sceTouch / sceMotion -> host input                (M4)
+       |-- sceAudioOut / sceNgs / ATRAC9 -> WASAPI                     (M4)
+       |-- sceAvPlayer -> Media Foundation                             (M4)
+       '-- savedata / appmgr / dialogs -> user-data directory          (M4)
+  -> game host: boot order, memory map, settings, title hooks
+  -> DX12 or Vulkan backend (explicit, no fallback)
+```
+
+Design points that the 30 fps target depends on (M6, prepared from M2):
+
+- **Guest memory:** move from a checked call per access to one reserved host
+  region addressed as base plus guest offset, with guard pages. Checked
+  accessors stay at HLE boundaries and in debug builds.
+- **Dispatch:** an O(1) indirect-target lookup over the combined
+  multi-module table, and direct calls for static targets.
+- **Threads:** the current baton scheduler runs one guest thread at a time.
+  Keep it while the frame budget allows; run guest threads on host threads
+  in parallel only when measurement requires it.
+- **GPU:** guest surfaces and textures live in guest memory and go through
+  a cache with explicit invalidation. Shaders are translated once and kept
+  in a persistent local cache, with pipeline caches on both backends.
+  PVRTC is decoded or transcoded because desktop GPUs lack it.
+- **Pacing:** `sceDisplay` flips map to present with vblank-equivalent
+  timing, so game logic sees the cadence it expects.
+
+## Status at the M0 checkpoint
 
 | Classification | Behavior |
 |---|---|
 | **Implemented** | Offline static CPU pipeline; standalone runtime/HLE foundation; read-only VFS; versioned GPU ABI; production DX12/Vulkan backends; Win32 host; content inspection, dump, and manifest tools; safety guards |
 | **Verified** | Clean-clone quality/build matrix; 73/73 CTest executions; public homebrew E2E; deterministic private generation; three-module host validation/mount; DX12 WARP/hardware and validation-enabled Vulkan self-tests; explicit no-fallback negative paths |
-| **Deferred** | Strict title entry; complete startup imports and title services; guest GXM; GXP/USSE; title-frame backend parity; audio/input/save/movie services; gameplay; performance work; local-only generated package assembly |
-| **Intentionally out of scope** | PFS/key derivation or extraction; distributing private content/generated title code; embedded Vita3K or other emulator; runtime JIT/interpreter fallback; silent unsupported behavior; automatic renderer fallback |
+| **Next (M1–M7)** | Linking generated code; title entry; startup imports; guest GXM; GXP/USSE; title frames on both backends; audio/input/save/movie; gameplay; 30 fps performance; one-command local build |
+| **Intentionally out of scope** | PFS/key derivation or extraction; distributing private content/generated title code; embedded Vita3K or other emulator; a Vita3K fork or Vita3K feature work; runtime JIT/interpreter fallback; silent unsupported behavior; automatic renderer fallback; online play |
 
 ## Test and CI layers
 
@@ -128,8 +163,9 @@ and game report
 - A requested renderer, adapter, or validation layer is never substituted.
 - GPU contract operations that are not implemented return
   `VITA_GPU_ERROR_UNSUPPORTED`; they do not report success.
-- Title entry remains unreachable until every readiness gate in
-  [`ROADMAP.md`](ROADMAP.md) is measured.
+- During bring-up, an import may be a *named stub*: registered, logged on
+  first call, and listed as `stubbed` in the import inventory. A silent
+  success is never allowed. See the [roadmap working rules](ROADMAP.md#working-rules).
 
 ## Framework references
 

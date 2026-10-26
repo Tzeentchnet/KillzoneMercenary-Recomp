@@ -227,7 +227,6 @@ out\build\windows-x64-debug\Debug\kzmrecomp_host.exe `
 ```
 
 Without `--self-test`, the same valid input reaches the explicit
-`title_not_implemented` event and exits 9. Static generation, generated-source
-provenance, and local-only packaging remain ordered gates in
-[`ROADMAP.md`](ROADMAP.md); no generated title output may be committed while
-those gates are implemented.
+`title_not_implemented` event and exits 9 until M2. Linking generated code
+(M1), title entry (M2), and the one-command local build (M7) are milestones
+in [`ROADMAP.md`](ROADMAP.md). Generated title output is never committed.

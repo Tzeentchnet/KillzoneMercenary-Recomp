@@ -1,5 +1,10 @@
 # Foundation checkpoint verification
 
+> **Historical record of milestone M0.** This report is kept as evidence and
+> is not maintained. Current state is in
+> [PROJECT_STATUS.md](PROJECT_STATUS.md), and future progress is logged
+> there rather than in new verification reports.
+
 Verification date: 2026-10-25
 
 Accepted clean-room window: 2026-10-25T10:50:11Z onward
