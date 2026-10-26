@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 2,
+  "entryPolicyVersion": 1,
+  "framework": {
+    "commit": "0000000000000000000000000000000000000000"
+  },
+  "generator": {
+    "name": "armrecomp",
+    "executableSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "moduleSidecarSchemaVersion": 4,
+    "moduleReportSchemaVersion": 4,
+    "composeReportSchemaVersion": 4,
+    "commands": [
+      {
+        "sequence": 0,
+        "phase": "emit",
+        "moduleId": "module_main",
+        "executable": "armrecomp",
+        "arguments": [
+          "emit",
+          "--module-id",
+          "module_main",
+          "inputs/module_main.elf",
+          "modules/module_main.c"
+        ]
+      },
+      {
+        "sequence": 1,
+        "phase": "compose",
+        "moduleId": null,
+        "executable": "armrecomp",
+        "arguments": [
+          "compose",
+          "--entry-module",
+          "module_main",
+          "--output",
+          "generated_registry.c",
+          "modules/module_main.module.json",
+          "modules/module_main.report.json"
+        ]
+      }
+    ],
+    "environment": [
+      {
+        "name": "VITARECOMP_EMIT_PC",
+        "value": "1"
+      },
+      {
+        "name": "VITARECOMP_EMIT_SPLIT",
+        "value": null
+      },
+      {
+        "name": "VITARECOMP_EMIT_SPLIT_INSNS",
+        "value": null
+      },
+      {
+        "name": "VITARECOMP_WHY",
+        "value": null
+      }
+    ]
+  },
+  "runtimeManifest": {
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "entryModuleId": "module_main",
+  "modules": [
+    {
+      "id": "module_main",
+      "sidecar": {
+        "path": "modules/module_main.module.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "reportJson": {
+        "path": "modules/module_main.report.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "reportText": {
+        "path": "modules/module_main.report.txt",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "tls": {
+        "present": true,
+        "resolved": true,
+        "address": "0x00001800",
+        "fileSize": 4,
+        "memorySize": 32,
+        "alignment": 64
+      },
+      "partitions": [
+        {
+          "unit": "main",
+          "path": "modules/module_main.c",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "functions": 1,
+          "instructions": 2,
+          "firstKey": "0x00001001",
+          "lastKey": "0x00001001"
+        }
+      ],
+      "readiness": {
+        "structuralReady": true,
+        "productionReady": false,
+        "pcInstrumentation": true,
+        "bodyCuts": 0,
+        "unreportedPartitions": 0,
+        "unclassifiedTraps": 0,
+        "classifiedNamedTraps": 1
+      }
+    }
+  ],
+  "aggregate": {
+    "reportJson": {
+      "path": "generated_registry.report.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "reportText": {
+      "path": "generated_registry.report.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "registrySource": {
+      "path": "generated_registry.c",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "registryHeader": {
+      "path": "generated_registry.h",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "moduleCount": 1,
+    "tlsLayout": {
+      "moduleCount": 1,
+      "dataSize": 32,
+      "dataAlignment": 64,
+      "items": [
+        {
+          "moduleId": "module_main",
+          "descriptorIndex": 0,
+          "order": 0,
+          "offset": 0,
+          "alignment": 64
+        }
+      ]
+    },
+    "structuralReady": true,
+    "entryEligible": true,
+    "productionReady": false,
+    "pcInstrumentation": true,
+    "entryMatches": 1,
+    "classifiedNamedTraps": 1,
+    "blockers": []
+  },
+  "generatedFiles": [
+    {
+      "path": "generated_registry.c",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "registry-source",
+      "moduleId": null
+    },
+    {
+      "path": "generated_registry.h",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "registry-header",
+      "moduleId": null
+    },
+    {
+      "path": "modules/module_main.c",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "module-source",
+      "moduleId": "module_main"
+    },
+    {
+      "path": "modules/module_main.h",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "module-header",
+      "moduleId": "module_main"
+    },
+    {
+      "path": "modules/module_main_imports/vita_hle_example.c",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "kind": "import-source",
+      "moduleId": "module_main"
+    }
+  ]
+}

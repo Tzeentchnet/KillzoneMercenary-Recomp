@@ -1,21 +1,24 @@
 # Project status and handoff
 
-Checkpoint accepted: 2026-10-25
+Foundation checkpoint accepted: 2026-10-25
 
-Status: **first foundation checkpoint complete and verified**
+Gate 1 status: **implemented and publicly/synthetically verified; privately
+unclosed**
 
-This is a native-foundation checkpoint, not a title-boot or playability
-checkpoint. The host validates and mounts a user-supplied runtime-image set,
-but it does not load or call generated Killzone code. Non-self-test title mode
-emits `title_not_implemented` and exits 9.
+This remains a native foundation, not a title-boot or playability claim.
+Public builds contain no generated bundle, so non-self-test title mode emits
+`title_not_implemented` and exits 9. An opt-in provenance-validated local
+bundle is now gated by strict retained-byte loading, binding, descriptor,
+stack, TLS, and CPU preparation before exactly one guest entry call.
+No ignored local status file records a successful private real-entry attempt.
 
 ## Revision record
 
 | Component | Accepted revision | State |
 |---|---|---|
-| Framework `Tzeentchnet/vitarecomp` | `f3408e1ea73b724c7ba3a644633938c220f2cc2a` | `main`, clean, pushed, framework CI green |
+| Framework `Tzeentchnet/vitarecomp` | `0e81bb4b275435b2396b01a88c8d767d0104cc8b` | Local Gate 1 commit; push and framework CI pending |
 | Game verification report | `36fef0e94ab99d1fc6e1903f02a388013eb3585d` | `main`, clean, pushed, game CI green |
-| Game framework gitlink | `f3408e1ea73b724c7ba3a644633938c220f2cc2a` | Matches `config/framework.commit` |
+| Game framework gitlink | `0e81bb4b275435b2396b01a88c8d767d0104cc8b` | Matches `config/framework.commit` |
 | Preserved upstream framework baseline | `6ed4a5c59045706292c8ec03dfe5207ecc4033a4` | Tagged `upstream-start-6ed4a5c5` |
 
 The report commit follows the independently tested game target
@@ -42,6 +45,37 @@ repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
 
 ## Implemented
 
+### Strict host-entry convergence
+
+- Generated-module ABI v4 exposes size/version-first descriptors, complete
+  ARM/Thumb dispatch, raw-entry/normalized-key/TLS/import/export metadata,
+  site-keyed writable function-import targets, explicit TLS alignment, and
+  schema-v4 report summaries. `armrecomp compose` deterministically emits the
+  registry and schema-v4 aggregate report, including checked TLS
+  order/offsets, for an explicitly selected entry module.
+- Entry policy v1 permits fully classified named traps only as a possible first
+  strict stop. Body cuts, unreported partitions, unclassified traps, incomplete
+  metadata, missing function-entry or PC instrumentation, and
+  unresolved/ambiguous entry records are structural blockers rejected before
+  entry.
+- Every deterministic manifest module retains immutable bytes and complete
+  loader metadata from its no-write/no-delete-share validation handle; the
+  strict loader never reopens a module path.
+- Runtime-manifest identity, layout, strict module-set load/extension checks,
+  generated descriptors/dispatch, exports/imports/variables, stack, TLS
+  template preparation and main-thread materialization, and CPU state all
+  precede construction of a move-only prepared capability.
+- Unsupported TLS-variable import tables are rejected during generation and
+  independently during host preflight; they are not silently treated as
+  complete metadata.
+- One consumed capability performs one `vita_guest_call`. Preparation,
+  strict-trap, explicit-exit, and clean-return outcomes have distinct events
+  and exit codes: 11, 12, 13, and 0 respectively. The absent-bundle default
+  remains exit 9.
+- Public synthetic bundle tests prove zero calls at every forced preparation
+  stop, one call on completion, strict-stop behavior, and deterministic
+  repeated processes. This is not evidence of title boot or gameplay.
+
 ### Two-repository and provenance foundation
 
 - The reusable framework and title-specific project are separate public
@@ -64,6 +98,10 @@ repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
 - Generated title C is local, ignored, and never tracked. Content-aware staging
   preserves unchanged files, removes only stale managed files, and has a
   synthetic regression.
+- Gate 1 provenance now binds per-module sidecars/reports, aggregate compose
+  readiness, the generated registry, and the complete C/header inventory to
+  the framework pin and raw runtime-manifest identity. Provenance-required
+  staging validates that evidence before modifying its target.
 - The production architecture has no JIT, interpreter, Dynarmic dependency,
   emulator runtime, or missing-target continuation fallback.
 
@@ -110,7 +148,7 @@ repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
 
 ## Verified
 
-### Clean-clone public matrix
+### Historical clean-clone foundation matrix
 
 - Framework Debug and Release: 17/17 CTests in each configuration.
 - Game Debug, RelWithDebInfo, and Release: 13/13 CTests in each configuration.
@@ -125,6 +163,34 @@ repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
 - JSON schemas/examples, Markdown links, CMake presets, workflow syntax,
   licenses, exact submodule pin, deterministic artifact inventory, and
   private-content guards passed.
+
+These counts are the accepted foundation record preserved in
+[`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md); they are not
+rewritten as Gate 1 results.
+
+### Gate 1 public synthetic validation
+
+On 2026-10-25, the current public working tree passed:
+
+```powershell
+ctest --test-dir out\build\vitarecomp-public-debug -C Debug `
+  --output-on-failure `
+  -R "^(emit|compose-generated-image-set|runtime|entry-state|loader-strict|module-set-binding)$"
+
+ctest --test-dir out\build\windows-x64-debug -C Debug `
+  --output-on-failure `
+  -R ("^(generated-provenance-synthetic|" +
+      "generated-bundle-build-synthetic|" +
+      "generated-bundle-adapter-unit|title-session-unit|" +
+      "native-host-unit)$")
+```
+
+The framework selection passed 6/6 and the game/host selection passed 5/5.
+Coverage includes ABI/report composition, structural blockers, classified
+strict stops, provenance and staging failures, generated-bundle configure and
+build rejection, retained bytes, no-TOCTOU loading, all eleven preparation
+stages, one-use entry, clean return, explicit exit, and first strict failure.
+All inputs were public or synthetic.
 
 ### Renderer and host acceptance
 
@@ -142,6 +208,9 @@ repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
   hardware/WARP coverage still passed.
 
 ### Redacted private acceptance
+
+The following is historical foundation evidence, not Gate 1 real-entry
+closure:
 
 - A supplied PCSA00107 archive was inspected read-only: 866 central-directory
   entries, five packaged executable modules, expected NoNpDRM record, and
@@ -166,6 +235,9 @@ repository remains GPL-2.0-or-later. `LICENSE`, `NOTICE`, framework
 Complete commands, devices, metrics, redaction rules, and history scans are in
 [`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md).
 
+No successful private real-entry result is recorded. Gate 1 therefore remains
+privately unclosed despite its implemented and publicly verified boundary.
+
 ## Public CI evidence
 
 - Framework accepted head:
@@ -175,26 +247,28 @@ Complete commands, devices, metrics, redaction rules, and history scans are in
 - Game verification-report head:
   [Windows quality gates 40189417323](https://github.com/Tzeentchnet/KillzoneMercenary-Recomp/actions/runs/40189417323)
 
-All three completed successfully. The workflow badges and latest public runs
-remain available from each repository's Actions page.
+All three completed successfully for the historical foundation. Hosted CI is
+and remains source-only: it leaves `KZMRECOMP_GENERATED_SOURCE_DIR` empty and
+has no private bundle, manifest, report, or generated title source. The local
+public Gate 1 results above do not claim a new hosted run.
 
 ## Deferred
 
 The ordered measurable backlog is maintained in
 [`ROADMAP.md`](ROADMAP.md):
 
-1. strict title-entry execution and generated-source provenance;
-2. startup imports, threading, TLS, and filesystem behavior;
-3. guest GXM scene capture through the shared GPU contract;
-4. GXP reflection and USSE-to-HLSL shader integration;
-5. DX12/Vulkan parity for title frames;
-6. audio, input, save, and movie services;
-7. named gameplay-progression checkpoints;
-8. correctness-preserving performance work; and
-9. local-only generation/build/package workflow.
+1. startup imports, threading, TLS, and filesystem behavior;
+2. guest GXM scene capture through the shared GPU contract;
+3. GXP reflection and USSE-to-HLSL shader integration;
+4. DX12/Vulkan parity for title frames;
+5. audio, input, save, and movie services;
+6. named gameplay-progression checkpoints;
+7. correctness-preserving performance work; and
+8. local-only generation/build/package workflow.
 
 None is implemented merely because its lower-level framework dependency
-exists. Title entry remains blocked until gate 1 closes.
+exists. Strict host entry makes later failures observable; it does not imply
+that the remaining title services are implemented.
 
 ## Intentionally out of scope
 

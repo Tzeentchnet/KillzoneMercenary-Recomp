@@ -67,7 +67,8 @@
       "configuration": "Debug",
       "targets": [
         "kzmrecomp_host",
-        "kzmrecomp_host_tests"
+        "kzmrecomp_host_tests",
+        "kzmrecomp_title_session_tests"
       ]
     },
     {
@@ -76,7 +77,8 @@
       "configuration": "RelWithDebInfo",
       "targets": [
         "kzmrecomp_host",
-        "kzmrecomp_host_tests"
+        "kzmrecomp_host_tests",
+        "kzmrecomp_title_session_tests"
       ]
     },
     {
@@ -85,7 +87,8 @@
       "configuration": "Release",
       "targets": [
         "kzmrecomp_host",
-        "kzmrecomp_host_tests"
+        "kzmrecomp_host_tests",
+        "kzmrecomp_title_session_tests"
       ]
     }
   ],

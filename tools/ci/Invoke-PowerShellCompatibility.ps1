@@ -10,7 +10,8 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $testScripts = @(
     'tests\Test-PrivateContentGuard.ps1',
     'tests\Test-ContentPipeline.ps1',
-    'tests\Test-StageGeneratedSources.ps1'
+    'tests\Test-StageGeneratedSources.ps1',
+    'tests\Test-GeneratedSourceProvenance.ps1'
 )
 $hosts = New-Object 'System.Collections.Generic.List[object]'
 foreach ($name in @('powershell', 'pwsh')) {

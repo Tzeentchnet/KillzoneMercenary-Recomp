@@ -41,9 +41,34 @@ pwsh -NoProfile -File tools/generated/Stage-GeneratedSources.ps1 `
   -RequiredFile '<required-generated-file>'
 ```
 
+Gate 1 additionally requires the ignored local provenance described in
+[`generated-source-provenance.md`](generated-source-provenance.md). Its
+opt-in staging mode validates the raw-manifest identity, framework revision,
+module sidecars/reports, compose report, registry, and generated inventory
+before modifying the target. Console and error output contain neither private
+paths nor content hashes.
+
+Only the generic schema, placeholder example, and provenance/staging tools are
+public. A real provenance manifest, command specification, module/report pair,
+compose output, staged source inventory, runtime manifest, and any resulting
+binary remain private local material.
+
+The CMake opt-in consumes only that explicit validated staging directory. It
+does not search the checkout or generator output, and it never installs or
+copies generated C, reports, provenance, or staging metadata into public
+artifact paths. Hosted builds leave the cache opt-in unset; their bundle test
+generates only a tiny synthetic staging tree below ignored `out/tests/` and
+removes it after verification.
+
+`KZMRECOMP_GENERATED_SOURCE_DIR` is empty by default in every public preset and
+hosted job. Hosted CI stays source-only and must not receive, discover, cache,
+upload, or attest to a private title bundle.
+
 Automated public tests use synthetic fixtures only. The accepted private
 validation is reported solely through redacted aggregate measurements in
 [`FOUNDATION_VERIFICATION.md`](FOUNDATION_VERIFICATION.md).
+That file is a historical foundation report, not successful private Gate 1
+real-entry evidence. Gate 1 remains privately unclosed.
 
 ## Local private roots
 

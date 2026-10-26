@@ -1,0 +1,620 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/kzmrecomp/generated-source-provenance.schema.json",
+  "title": "Killzone local generated-source provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "entryPolicyVersion",
+    "framework",
+    "generator",
+    "runtimeManifest",
+    "entryModuleId",
+    "modules",
+    "aggregate",
+    "generatedFiles"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "entryPolicyVersion": {
+      "const": 1
+    },
+    "framework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/commit"
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "executableSha256",
+        "moduleSidecarSchemaVersion",
+        "moduleReportSchemaVersion",
+        "composeReportSchemaVersion",
+        "commands",
+        "environment"
+      ],
+      "properties": {
+        "name": {
+          "const": "armrecomp"
+        },
+        "executableSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "moduleSidecarSchemaVersion": {
+          "const": 4
+        },
+        "moduleReportSchemaVersion": {
+          "const": 4
+        },
+        "composeReportSchemaVersion": {
+          "const": 4
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        },
+        "environment": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/environmentKnob"
+          }
+        }
+      }
+    },
+    "runtimeManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "entryModuleId": {
+      "$ref": "#/$defs/moduleId"
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/module"
+      }
+    },
+    "aggregate": {
+      "$ref": "#/$defs/aggregate"
+    },
+    "generatedFiles": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 100000,
+      "items": {
+        "$ref": "#/$defs/generatedFile"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "moduleId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*//)(?!\\.?\\.?$)(?!\\.?\\.?/)(?!.*?/\\.?\\.?/)(?!.*?/\\.?\\.?$)[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "phase",
+        "moduleId",
+        "executable",
+        "arguments"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "phase": {
+          "enum": [
+            "emit",
+            "compose"
+          ]
+        },
+        "moduleId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/moduleId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "executable": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/commandToken"
+            },
+            {
+              "pattern": "^(?:[A-Za-z0-9._+-]+/)*armrecomp(?:\\.exe)?$"
+            }
+          ]
+        },
+        "arguments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/commandToken"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "emit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "moduleId": {
+                "$ref": "#/$defs/moduleId"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "moduleId": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "commandToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?!/)(?!.*[:\\\\\"'])(?!.*=/)(?!\\.?\\.?/)(?!.*?/\\.?\\.?(?:/|$))[ -~]+$"
+    },
+    "environmentKnob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "VITARECOMP_EMIT_PC",
+            "VITARECOMP_EMIT_SPLIT",
+            "VITARECOMP_EMIT_SPLIT_INSNS",
+            "VITARECOMP_WHY"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^[ -~]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "path",
+        "sha256",
+        "functions",
+        "instructions",
+        "firstKey",
+        "lastKey"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "pattern": "^(?:main|part-[0-9]{3})$"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "functions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "instructions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "firstKey": {
+          "$ref": "#/$defs/hexAddress"
+        },
+        "lastKey": {
+          "$ref": "#/$defs/hexAddress"
+        }
+      }
+    },
+    "hexAddress": {
+      "type": "string",
+      "pattern": "^0x[0-9A-F]{8}$"
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "structuralReady",
+        "productionReady",
+        "pcInstrumentation",
+        "bodyCuts",
+        "unreportedPartitions",
+        "unclassifiedTraps",
+        "classifiedNamedTraps"
+      ],
+      "properties": {
+        "structuralReady": {
+          "type": "boolean"
+        },
+        "productionReady": {
+          "type": "boolean"
+        },
+        "pcInstrumentation": {
+          "type": "boolean"
+        },
+        "bodyCuts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unreportedPartitions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unclassifiedTraps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "classifiedNamedTraps": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sidecar",
+        "reportJson",
+        "reportText",
+        "tls",
+        "partitions",
+        "readiness"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/moduleId"
+        },
+        "sidecar": {
+          "$ref": "#/$defs/artifact"
+        },
+        "reportJson": {
+          "$ref": "#/$defs/artifact"
+        },
+        "reportText": {
+          "$ref": "#/$defs/artifact"
+        },
+        "tls": {
+          "$ref": "#/$defs/tls"
+        },
+        "partitions": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/partition"
+          }
+        },
+        "readiness": {
+          "$ref": "#/$defs/readiness"
+        }
+      }
+    },
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reportJson",
+        "reportText",
+        "registrySource",
+        "registryHeader",
+        "moduleCount",
+        "tlsLayout",
+        "structuralReady",
+        "entryEligible",
+        "productionReady",
+        "pcInstrumentation",
+        "entryMatches",
+        "classifiedNamedTraps",
+        "blockers"
+      ],
+      "properties": {
+        "reportJson": {
+          "$ref": "#/$defs/artifact"
+        },
+        "reportText": {
+          "$ref": "#/$defs/artifact"
+        },
+        "registrySource": {
+          "$ref": "#/$defs/artifact"
+        },
+        "registryHeader": {
+          "$ref": "#/$defs/artifact"
+        },
+        "moduleCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "tlsLayout": {
+          "$ref": "#/$defs/tlsLayout"
+        },
+        "structuralReady": {
+          "type": "boolean"
+        },
+        "entryEligible": {
+          "type": "boolean"
+        },
+        "productionReady": {
+          "type": "boolean"
+        },
+        "pcInstrumentation": {
+          "type": "boolean"
+        },
+        "entryMatches": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "classifiedNamedTraps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockers": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "aggregate-not-structurally-ready",
+              "body-cuts",
+              "duplicate-or-unresolved-entry",
+              "entry-module-mismatch",
+              "missing-function-entry-instrumentation",
+              "missing-pc-instrumentation",
+              "module-count-mismatch",
+              "module-not-structurally-ready",
+              "unclassified-traps",
+              "unreported-partitions"
+            ]
+          }
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "present",
+        "resolved",
+        "address",
+        "fileSize",
+        "memorySize",
+        "alignment"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "address": {
+          "$ref": "#/$defs/hexAddress"
+        },
+        "fileSize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "memorySize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "alignment": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483648
+        }
+      }
+    },
+    "tlsLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "moduleCount",
+        "dataSize",
+        "dataAlignment",
+        "items"
+      ],
+      "properties": {
+        "moduleCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "dataSize": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "dataAlignment": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 2147483648
+        },
+        "items": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "moduleId",
+              "descriptorIndex",
+              "order",
+              "offset",
+              "alignment"
+            ],
+            "properties": {
+              "moduleId": {
+                "$ref": "#/$defs/moduleId"
+              },
+              "descriptorIndex": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "alignment": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483648
+              }
+            }
+          }
+        }
+      }
+    },
+    "generatedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "kind",
+        "moduleId"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "kind": {
+          "enum": [
+            "import-source",
+            "module-header",
+            "module-partition",
+            "module-source",
+            "registry-header",
+            "registry-source"
+          ]
+        },
+        "moduleId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/moduleId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

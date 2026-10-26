@@ -6,7 +6,7 @@ This record maps useful evidence from the historical Vita3K hybrid into the
 accepted standalone architecture. It is not an active TODO list. Historical
 evidence labels are defined in [`README.md`](README.md); current production
 status is reconciled against framework
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a` and game report
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b` and game report
 `36fef0e94ab99d1fc6e1903f02a388013eb3585d`.
 
 ## Historical system
@@ -40,7 +40,7 @@ The framework owns the production static generated-C path:
 - production DX12 and Vulkan backends plus public conformance tests.
 
 The exact game gitlink is
-`f3408e1ea73b724c7ba3a644633938c220f2cc2a`. The complete historical C++ tool
+`0e81bb4b275435b2396b01a88c8d767d0104cc8b`. The complete historical C++ tool
 was rejected rather than retained as a second production recompiler.
 
 ### Game repository
@@ -71,13 +71,13 @@ captures belong only in ignored local roots.
 
 The historical AOT CPU bridge remains outside the required patch series.
 
-## Migrated contracts at the accepted checkpoint
+## Migrated contracts and current Gate 1 integration
 
 | Contract | Current status | Evidence/integration |
 |---|---|---|
 | Capture after relocation/export/import linking | **Implemented and verified** | Required Vita3K patch 0001; private three-image repeat |
 | Explicit headless dump opt-in | **Implemented and verified** | Required Vita3K patch 0002; wrapper capability checks |
-| Stable generated-source identities | **Implemented and verified** | `Stage-GeneratedSources.ps1` plus public regression |
+| Stable generated-source identities | **Implemented and publicly verified** | Schema-v1 local provenance, validator, content-aware staging, and synthetic regressions |
 | Checked guest memory | **Implemented and verified** | Framework runtime and prior-AOT tests |
 | Raw CPU/VFP state behavior | **Implemented and verified for represented state** | Framework CPU/runtime tests |
 | ARM/Thumb mode-aware discovery and dispatch | **Implemented and verified** | Public discovery/emitter/dispatch regressions |
@@ -87,21 +87,22 @@ The historical AOT CPU bridge remains outside the required patch series.
 | Exclusive monitor/write invalidation | **Implemented and verified** | Cross-thread framework runtime test |
 | Strict source/target dispatch diagnostics | **Implemented and verified** | Exact diagnostic test; default remains aborting |
 | Deterministic runtime-image ordering/overlap rejection | **Implemented and verified in the game manifest layer** | Synthetic and private repeat validation |
-| Multi-image `armrecomp` report composition | **Deferred** | Generator still reports each image independently |
+| Multi-image `armrecomp` report composition | **Implemented and publicly verified** | ABI-v4 descriptors preserve site-keyed function-import slots and add explicit TLS alignment; schema-v4 module evidence and deterministic registry/aggregate TLS layout composition |
+| Strict conditional host entry | **Implemented and publicly verified; privately unclosed** | Retained bytes, strict loader/binder, stack/TLS/CPU preparation, and one-use guest-call tests; no private real-entry evidence |
 | Full external-oracle state adapter | **Deferred and optional** | Not required by production or extraction |
 
-The accepted private CPU repeat generated and compiled all three modules, but
-its 3,770 explicit traps remain title-entry blockers. “Generated successfully”
-is not a bootability claim.
+The accepted private CPU repeat generated and compiled all three modules. Its
+classified named traps keep `productionReady` false but are not structural
+entry blockers; if reached, the first one must stop the guest call explicitly.
+The historical repeat did not attempt real Gate 1 entry. “Generated
+successfully” is not a bootability claim.
 
 ## Remaining retained fixtures
 
 Most semantic cases that were initially recorded as deferred were promoted
-into canonical executable tests during CPU/runtime integration. Retained
-non-production evidence still covers:
+into canonical executable tests during CPU/runtime and Gate 1 integration.
+Retained non-production evidence still covers:
 
-- deterministic framework-level composition of multiple per-image generation
-  reports, which has no canonical merger API;
 - any state items not represented by the production CPU ABI, including a
   future full external-oracle comparison surface; and
 - instruction or transfer shapes still reported by the accepted private trap

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 namespace kzm::game {
@@ -19,10 +20,47 @@ struct RuntimeMemoryLayout {
     std::uint32_t sysmem_size;
     std::uint32_t kernel_base;
     std::uint32_t kernel_size;
+    std::uint32_t stack_base;
+    std::uint32_t stack_size;
+    std::uint32_t tls_base;
+    std::uint32_t tls_size;
+
+    bool operator==(const RuntimeMemoryLayout &) const = default;
 };
 
+struct GuestLoadRange {
+    std::uint32_t base;
+    std::uint32_t size;
+};
+
+struct MemoryLayoutPolicy {
+    std::uint32_t window_alignment;
+    std::uint32_t arena_alignment;
+    std::uint32_t guard_size;
+    std::uint32_t heap_size;
+    std::uint32_t sysmem_size;
+    std::uint32_t kernel_size;
+    std::uint32_t stack_size;
+    std::uint32_t tls_size;
+    std::uint32_t maximum_window_size;
+};
+
+enum class MemoryLayoutStatus {
+    success,
+    invalid_argument,
+    invalid_alignment,
+    range_overflow,
+    overlapping_load_ranges,
+    window_too_large,
+};
+
+[[nodiscard]] MemoryLayoutPolicy title_memory_policy() noexcept;
+[[nodiscard]] MemoryLayoutStatus
+plan_memory_layout(std::span<const GuestLoadRange> load_ranges,
+                   const MemoryLayoutPolicy &policy,
+                   RuntimeMemoryLayout &layout);
+[[nodiscard]] std::string_view
+memory_layout_status_message(MemoryLayoutStatus status) noexcept;
 [[nodiscard]] RuntimeMemoryLayout scaffold_memory_layout() noexcept;
-[[nodiscard]] bool title_execution_ready() noexcept;
-[[nodiscard]] std::string_view title_execution_blocker() noexcept;
 
 } // namespace kzm::game

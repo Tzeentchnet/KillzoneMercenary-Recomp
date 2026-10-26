@@ -24,6 +24,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(KZMRECOMP_BUILD_HOST "Build the native Windows host" ON)
+set(KZMRECOMP_GENERATED_SOURCE_DIR "" CACHE PATH
+  "Explicit ignored staging directory for a validated generated title bundle")
+set(KZMRECOMP_RUNTIME_MANIFEST "" CACHE FILEPATH
+  "Raw runtime manifest bound to the generated title bundle provenance")
 
 set(VITARECOMP_BUILD_GPU ON CACHE BOOL
   "Build the renderer-neutral GPU contract" FORCE)
@@ -56,6 +60,50 @@ function(kzmrecomp_project_warnings target)
   endif()
 endfunction()
 
+add_subdirectory(src/game)
+
+add_library(kzmrecomp_host_support STATIC
+  src/game/title_config.cpp
+  src/host/cli.cpp
+  src/host/json.cpp
+  src/host/logging.cpp
+  src/host/manifest.cpp
+  src/host/sha256.cpp
+)
+target_include_directories(kzmrecomp_host_support PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_compile_features(kzmrecomp_host_support PUBLIC cxx_std_20)
+target_compile_definitions(kzmrecomp_host_support PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  UNICODE
+  _UNICODE
+)
+target_link_libraries(kzmrecomp_host_support PRIVATE bcrypt)
+kzmrecomp_project_warnings(kzmrecomp_host_support)
+
+add_library(kzmrecomp_host_title STATIC
+  src/host/runtime_session.cpp
+  src/host/title_application.cpp
+  src/host/title_session.cpp
+)
+target_include_directories(kzmrecomp_host_title PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_compile_features(kzmrecomp_host_title PUBLIC cxx_std_20)
+target_compile_definitions(kzmrecomp_host_title PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  UNICODE
+  _UNICODE
+)
+target_link_libraries(kzmrecomp_host_title PUBLIC
+  kzmrecomp_host_support
+  kzmrecomp_game_generated_bundle
+)
+kzmrecomp_project_warnings(kzmrecomp_host_title)
+
 if(KZMRECOMP_BUILD_HOST)
   if(NOT TARGET Vitarecomp::DXC)
     message(FATAL_ERROR
@@ -64,31 +112,9 @@ if(KZMRECOMP_BUILD_HOST)
       "extracted official ${VITARECOMP_DXC_RELEASE_TAG} release.")
   endif()
 
-  add_library(kzmrecomp_host_support STATIC
-    src/game/title_config.cpp
-    src/host/cli.cpp
-    src/host/json.cpp
-    src/host/logging.cpp
-    src/host/manifest.cpp
-    src/host/sha256.cpp
-  )
-  target_include_directories(kzmrecomp_host_support PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-  )
-  target_compile_features(kzmrecomp_host_support PUBLIC cxx_std_20)
-  target_compile_definitions(kzmrecomp_host_support PRIVATE
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN
-    UNICODE
-    _UNICODE
-  )
-  target_link_libraries(kzmrecomp_host_support PRIVATE bcrypt)
-  kzmrecomp_project_warnings(kzmrecomp_host_support)
-
   add_library(kzmrecomp_host_runtime STATIC
     src/host/application.cpp
     src/host/renderer.cpp
-    src/host/runtime_session.cpp
     src/host/window.cpp
   )
   target_include_directories(kzmrecomp_host_runtime PUBLIC
@@ -102,8 +128,7 @@ if(KZMRECOMP_BUILD_HOST)
     _UNICODE
   )
   target_link_libraries(kzmrecomp_host_runtime PUBLIC
-    kzmrecomp_host_support
-    vitarecomp
+    kzmrecomp_host_title
     vitarecomp::gpu
     user32
   )
@@ -276,6 +301,42 @@ if(BUILD_TESTING)
       -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-StageGeneratedSources.ps1"
   )
   add_test(
+    NAME generated-provenance-synthetic
+    COMMAND
+      "${KZMRECOMP_POWERSHELL}"
+      -NoLogo
+      -NoProfile
+      -ExecutionPolicy Bypass
+      -File
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-GeneratedSourceProvenance.ps1"
+  )
+  set(_generated_bundle_build_test_command
+    "${KZMRECOMP_POWERSHELL}"
+    -NoLogo
+    -NoProfile
+    -ExecutionPolicy Bypass
+    -File
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-GeneratedBundleBuild.ps1"
+    -Generator "${CMAKE_GENERATOR}"
+    -Configuration "$<CONFIG>"
+  )
+  if(CMAKE_GENERATOR_PLATFORM)
+    list(APPEND _generated_bundle_build_test_command
+      -GeneratorPlatform "${CMAKE_GENERATOR_PLATFORM}")
+  endif()
+  if(CMAKE_GENERATOR_TOOLSET)
+    list(APPEND _generated_bundle_build_test_command
+      -GeneratorToolset "${CMAKE_GENERATOR_TOOLSET}")
+  endif()
+  add_test(
+    NAME generated-bundle-build-synthetic
+    COMMAND ${_generated_bundle_build_test_command}
+  )
+  set_tests_properties(generated-bundle-build-synthetic PROPERTIES
+    TIMEOUT 600
+    LABELS "generated;integration"
+  )
+  add_test(
     NAME content-guard-staged
     COMMAND
       "${KZMRECOMP_POWERSHELL}"
@@ -297,6 +358,60 @@ if(BUILD_TESTING)
       -Tracked
   )
 
+  add_executable(kzmrecomp_generated_bundle_tests
+    tests/generated_bundle_tests.cpp
+  )
+  target_compile_features(kzmrecomp_generated_bundle_tests
+    PRIVATE cxx_std_20)
+  target_link_libraries(kzmrecomp_generated_bundle_tests PRIVATE
+    kzmrecomp_game_generated_bundle
+  )
+  if(KZMRECOMP_GENERATED_BUNDLE_PRESENT)
+    target_compile_definitions(kzmrecomp_generated_bundle_tests PRIVATE
+      KZMRECOMP_TEST_EXPECT_GENERATED_BUNDLE=1)
+  else()
+    target_compile_definitions(kzmrecomp_generated_bundle_tests PRIVATE
+      KZMRECOMP_TEST_EXPECT_GENERATED_BUNDLE=0)
+  endif()
+  kzmrecomp_project_warnings(kzmrecomp_generated_bundle_tests)
+  add_test(
+    NAME generated-bundle-adapter-unit
+    COMMAND kzmrecomp_generated_bundle_tests
+  )
+  set_tests_properties(generated-bundle-adapter-unit PROPERTIES
+    TIMEOUT 60
+    LABELS "generated;unit"
+  )
+
+  add_executable(kzmrecomp_title_session_tests
+    tests/title_session_tests.cpp
+  )
+  target_compile_features(kzmrecomp_title_session_tests
+    PRIVATE cxx_std_20)
+  target_link_libraries(kzmrecomp_title_session_tests PRIVATE
+    kzmrecomp_host_title
+  )
+  kzmrecomp_project_warnings(kzmrecomp_title_session_tests)
+  add_test(
+    NAME title-session-unit
+    COMMAND kzmrecomp_title_session_tests
+  )
+  set_tests_properties(title-session-unit PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    TIMEOUT 120
+    LABELS "host;title;unit"
+  )
+
+  add_executable(kzmrecomp_title_test_driver
+    tests/title_test_driver.cpp
+  )
+  target_compile_features(kzmrecomp_title_test_driver
+    PRIVATE cxx_std_20)
+  target_link_libraries(kzmrecomp_title_test_driver PRIVATE
+    kzmrecomp_host_title
+  )
+  kzmrecomp_project_warnings(kzmrecomp_title_test_driver)
+
   if(KZMRECOMP_BUILD_HOST)
     add_executable(kzmrecomp_host_tests
       tests/native_host_tests.cpp
@@ -304,7 +419,10 @@ if(BUILD_TESTING)
     target_compile_features(kzmrecomp_host_tests PRIVATE cxx_std_20)
     target_link_libraries(kzmrecomp_host_tests PRIVATE
       kzmrecomp_host_support
+      kzmrecomp_game_generated_bundle
     )
+    add_dependencies(kzmrecomp_host_tests
+      kzmrecomp_generated_bundle_tests)
     kzmrecomp_project_warnings(kzmrecomp_host_tests)
     add_test(NAME native-host-unit COMMAND kzmrecomp_host_tests)
     set_tests_properties(native-host-unit PROPERTIES

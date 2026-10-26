@@ -2,8 +2,8 @@
 
 The verified foundation is complete. The following backlog is ordered by
 dependency and closes only on measurable evidence. It contains no schedule or
-time estimate. Until gate 1 closes, normal title mode must keep the explicit
-exit-9 `title_not_implemented` boundary.
+time estimate. Public builds keep the explicit exit-9
+`title_not_implemented` boundary because they contain no generated bundle.
 
 Every gate inherits these rules:
 
@@ -21,20 +21,44 @@ Every gate inherits these rules:
 **Goal:** call the real translated module entry only after all preconditions
 are proven.
 
-**Closure gates:**
+**Gate 1 status: implemented and publicly/synthetically verified; privately
+unclosed.**
 
-- define a deterministic local generated-source provenance manifest recording
-  exact framework revision, input-manifest identity, generator command,
-  reports, partitions, and generated-file inventory without publishing
-  private paths or hashes;
-- account for every generated report trap, body cut, unreported partition,
-  duplicate key, and unresolved entry transfer under a documented entry policy;
-- implement and test module load, relocation, TLS, stack, CPU state, export,
-  import, and entry-address preconditions;
-- add public malformed/synthetic tests for each rejected precondition;
-- prove the host cannot call title code when any gate fails; and
-- replace exit 9 only when one instrumented entry call completes or reaches a
-  named strict failure with no interpreter, JIT, emulator, or success stub.
+The accepted public implementation includes:
+
+- generated-module ABI v4, schema-v4 module reports and sidecars with explicit
+  TLS alignment, deterministic `armrecomp compose`, and schema-v4 aggregate
+  reports/registries with checked TLS offsets and order;
+- entry policy v1: body cuts, unreported partitions, unclassified traps,
+  missing function-entry or PC instrumentation, incomplete metadata, or
+  unresolved/ambiguous entry records block before entry; fully classified
+  named traps remain entry-eligible only as the first strict stop;
+- deterministic local provenance schema/tools and provenance-required staging,
+  bound to the framework revision, raw-manifest identity, exact command token
+  arrays, reports, partitions, and generated inventory;
+- retained immutable module bytes, with no path reopen between validation and
+  strict loading;
+- fail-closed content identity, layout, runtime/mount, module preflight/load,
+  descriptor/dispatch, binding, stack, TLS template/materialization, and
+  CPU-state gates;
+- a move-only capability consumed by at most one `vita_guest_call`, with
+  dedicated precondition, strict-failure, explicit-exit, and clean-return
+  outcomes; and
+- public malformed and synthetic tests proving zero calls on every preparation
+  failure, one call on completion or strict stop, and deterministic repeated
+  process output.
+
+**Private closure criterion (not met):** an instrumented entry attempt using a
+locally generated real bundle must pass every structural precondition and then
+either return cleanly or stop at its first classified named strict failure.
+No ignored local status file records that evidence. Public and hosted builds
+remain source-only, leave `KZMRECOMP_GENERATED_SOURCE_DIR` empty, and keep
+default exit 9.
+
+Optional stronger acceptance evidence is a clean return rather than a named
+strict stop and a second run that reproduces the same outcome. Those are not
+required to accept the public implementation, are not hosted-CI criteria, and
+would not by themselves establish bootability or playability.
 
 ## 2. Imports, threading, and filesystem startup
 

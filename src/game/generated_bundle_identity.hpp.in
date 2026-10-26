@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#pragma once
+
+#define KZMRECOMP_GENERATED_REGISTRY_HEADER \
+    "@KZMRECOMP_GENERATED_REGISTRY_HEADER@"
+
+namespace kzm::game::detail {
+
+inline constexpr char kExpectedRuntimeManifestSha256[] =
+    "@KZMRECOMP_EXPECTED_RUNTIME_MANIFEST_SHA256@";
+
+} // namespace kzm::game::detail

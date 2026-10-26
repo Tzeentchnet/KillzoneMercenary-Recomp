@@ -89,6 +89,7 @@
 /recomp-output/
 /src/game/generated/
 /src/game/recompiled/
+**/.generated-source-provenance.json
 
 # Traces, captures, shader/pipeline caches, and saves
 /trace/
