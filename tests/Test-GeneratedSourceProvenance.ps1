@@ -511,6 +511,7 @@ extern "C" {
 #endif
 
 void vita_hle_memcpy(void);
+void vita_hle_sceKernelGetProcessId(void);
 void vita_func_module_main_00001001(void);
 extern vita_fn vita_import_target_module_main_00000194;
 extern const vita_generated_module_descriptor
@@ -530,7 +531,7 @@ extern const vita_generated_module_descriptor
 
 static const vita_dispatch_entry vita_functions_module_main[] = {
     { 0x00001001u, vita_func_module_main_00001001 },
-    { 0x00001101u, vita_hle_memcpy }
+    { 0x00001100u, vita_hle_memcpy }
 };
 
 vita_fn vita_import_target_module_main_00000194 = vita_hle_memcpy;
@@ -539,7 +540,7 @@ static const vita_fn_import vita_fn_imports_module_main[] = {
     {
         0x11223344u,
         0xAABBCCDDu,
-        0x00001101u,
+        0x00001100u,
         0x00000194u,
         "SceSynthetic::memcpy",
         1u,
@@ -594,6 +595,14 @@ void vita_func_module_main_00001001(void) {
             0x00001000u,
             0xE7F000F0u,
             "synthetic named strict failure");
+    }
+    r0 = 0u;
+    vita_call(vita_hle_sceKernelGetProcessId);
+    if (r0 != 0x40010000u) {
+        vita_trap_unimpl(
+            0x00001000u,
+            0xE7F000F1u,
+            "synthetic generated/runtime CPU ABI mismatch");
     }
     vita_call(vita_import_target_module_main_00000194);
 }
@@ -675,7 +684,7 @@ const vita_generated_tls_layout vita_generated_image_tls_layout = {
 
 const vita_dispatch_entry vita_generated_image_dispatch[] = {
     { 0x00001001u, vita_func_module_main_00001001 },
-    { 0x00001101u, vita_hle_memcpy }
+    { 0x00001100u, vita_hle_memcpy }
 };
 const uint32_t vita_generated_image_dispatch_count = 2u;
 
@@ -706,7 +715,7 @@ void vita_generated_image_init(void) {
         -Path $sidecarPath `
         -Code 'synthetic-sidecar'
     $functionImport = [pscustomobject][ordered]@{
-        key = '0x00001101'
+        key = '0x00001100'
         stubAddress = '0x00001100'
         targetSite = '0x00000194'
         libraryNid = '0x11223344'
@@ -724,7 +733,7 @@ void vita_generated_image_init(void) {
             symbol = 'vita_func_module_main_00001001'
         },
         [pscustomobject][ordered]@{
-            key = '0x00001101'
+            key = '0x00001100'
             kind = 'functionImport'
             symbol = 'vita_hle_memcpy'
             libraryNid = '0x11223344'

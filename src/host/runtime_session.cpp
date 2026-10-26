@@ -48,6 +48,20 @@ void runtime_diagnostic(const vita_diagnostic *event, void *userdata) {
     if (event == nullptr || userdata == nullptr)
         return;
     auto &logger = *static_cast<Logger *>(userdata);
+    if (event->code == VITA_DIAG_IMPORT) {
+        logger.log(
+            diagnostic_level(event->severity), "runtime_diagnostic",
+            event->message != nullptr ? event->message : "runtime event",
+            {{"status", std::to_string(event->status)},
+             {"guest_address", std::to_string(event->guest_address)},
+             {"library_nid", std::to_string(event->library_nid)},
+             {"function_nid", std::to_string(event->function_nid)},
+             {"library_name",
+              event->library_name != nullptr ? event->library_name : ""},
+             {"function_name",
+              event->function_name != nullptr ? event->function_name : ""}});
+        return;
+    }
     logger.log(diagnostic_level(event->severity), "runtime_diagnostic",
                event->message != nullptr ? event->message : "runtime event",
                {{"status", std::to_string(event->status)}});
@@ -104,6 +118,10 @@ RuntimeSession::RuntimeSession(Logger &logger,
     config.heap_size = layout.heap_size;
     config.sysmem_base = layout.sysmem_base;
     config.sysmem_size = layout.sysmem_size;
+    config.cdram_base = layout.cdram_base;
+    config.cdram_size = layout.cdram_size;
+    config.phycont_base = layout.phycont_base;
+    config.phycont_size = layout.phycont_size;
     config.kernel_base = layout.kernel_base;
     config.kernel_size = layout.kernel_size;
     config.tls_base = layout.tls_base;

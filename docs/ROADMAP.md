@@ -9,7 +9,7 @@ behavior of the real game, not on reports.
 |---|---|---|
 | [M0](#m0--foundation) | Build, host, renderers, content pipeline | ✅ Done |
 | [M1](#m1--lift-and-link-decompile) | All game code lifted to C and linked into the host | ▶ **Current**: build path done, trap ranking and symbol map open |
-| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: selected entry module returns clean; dependency-ordered module starts next |
+| [M2](#m2--into-title-code) | The recompiled game boots and reaches its frame loop | ▶ **Current**: ordered module startup reaches GXP vertex-program creation |
 | [M3](#m3--first-frame) | First game-rendered frame on DX12 and Vulkan | |
 | [M4](#m4--main-menu) | Main menu with input, audio, FMV, and saves | |
 | [M5](#m5--first-mission) | Mission 1 playable start to finish | |
@@ -139,8 +139,9 @@ Tasks:
 - [x] **Game:** derive the title memory plan from the validated load
       ranges, with disjoint heap, sysmem, kernel, main-stack, and TLS arenas
       (`src/game/title_config.*`).
-- [ ] **Game:** add GPU-mapped (CDRAM-equivalent) memory to that plan, and
-      check whether its 256 MiB window cap fits the game's real allocations.
+- [x] **Game:** add dedicated GPU-mapped CDRAM and physically contiguous
+      arenas. The measured plan is 96 MiB main, 128 MiB CDRAM, 16 MiB
+      physically contiguous, and a 384 MiB maximum guest window.
 - [x] **Framework:** strict module-set preflight/load, export/import
       binding by NID, checked main-stack/TLS/CPU entry preparation, and the
       `vita_guest_call` boundary that reports completion, an exit request,
@@ -168,10 +169,15 @@ Tasks:
       `SceLibc::__cxa_set_dso_handle_main` HLE, and three consecutive DX12 WARP
       runs called the selected entry module and returned cleanly with exit 0.
       Supporting modules are not started yet, so no frame loop is claimed.
-- [ ] **Game:** run `module_start` for the other modules in dependency
-      order before the entry module, deriving the order from retained module
-      metadata and native-run dependencies. Today only the selected entry
-      module is started.
+- [x] **Game:** run `module_start` for the support modules in the retained
+      dependency order before the entry module, preserving threads created by
+      earlier starts within one strict guest boundary.
+- [x] **Run it:** the ordered three-module DX12 WARP run now passes measured
+      process/TLS/libc/AppUtil startup, partitioned Sysmem, GXM initialization,
+      mappings, context and shader-patcher registration, and GXP reflection.
+      It stops explicitly at
+      `SceGxm::sceGxmShaderPatcherCreateVertexProgram`; no frame loop or shader
+      translation is claimed.
 - [ ] **Game:** print the first strict failure with its symbol name once
       the M1 symbol map exists.
 - [ ] **Framework:** grow kernel, thread, synchronization, sysmem, I/O,

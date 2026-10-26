@@ -50,11 +50,13 @@ MemoryLayoutPolicy title_memory_policy() noexcept {
         .arena_alignment = UINT32_C(0x10000),
         .guard_size = UINT32_C(0x10000),
         .heap_size = 24U * 1024U * 1024U,
-        .sysmem_size = 16U * 1024U * 1024U,
+        .sysmem_size = 96U * 1024U * 1024U,
+        .cdram_size = 128U * 1024U * 1024U,
+        .phycont_size = 16U * 1024U * 1024U,
         .kernel_size = 8U * 1024U * 1024U,
         .stack_size = 4U * 1024U * 1024U,
         .tls_size = 4U * 1024U * 1024U,
-        .maximum_window_size = 256U * 1024U * 1024U,
+        .maximum_window_size = 384U * 1024U * 1024U,
     };
 }
 
@@ -63,7 +65,8 @@ plan_memory_layout(std::span<const GuestLoadRange> load_ranges,
                    const MemoryLayoutPolicy &policy,
                    RuntimeMemoryLayout &layout) {
     if (load_ranges.empty() || policy.heap_size == 0U ||
-        policy.sysmem_size == 0U || policy.kernel_size == 0U ||
+        policy.sysmem_size == 0U || policy.cdram_size == 0U ||
+        policy.phycont_size == 0U || policy.kernel_size == 0U ||
         policy.stack_size == 0U || policy.tls_size == 0U ||
         policy.maximum_window_size == 0U) {
         return MemoryLayoutStatus::invalid_argument;
@@ -76,9 +79,10 @@ plan_memory_layout(std::span<const GuestLoadRange> load_ranges,
         policy.guard_size % policy.arena_alignment != 0U) {
         return MemoryLayoutStatus::invalid_alignment;
     }
-    const std::array<std::uint32_t, 5> arena_sizes{
-        policy.heap_size,  policy.sysmem_size, policy.kernel_size,
-        policy.stack_size, policy.tls_size,
+    const std::array<std::uint32_t, 7> arena_sizes{
+        policy.heap_size, policy.sysmem_size, policy.cdram_size,
+        policy.phycont_size, policy.kernel_size, policy.stack_size,
+        policy.tls_size,
     };
     if (std::any_of(arena_sizes.begin(), arena_sizes.end(),
                     [&](std::uint32_t size) {
@@ -124,6 +128,11 @@ plan_memory_layout(std::span<const GuestLoadRange> load_ranges,
         !add_guard_and_align(cursor, policy) ||
         !place_arena(cursor, policy.sysmem_size, planned.sysmem_base) ||
         !add_guard_and_align(cursor, policy) ||
+        !place_arena(cursor, policy.cdram_size, planned.cdram_base) ||
+        !add_guard_and_align(cursor, policy) ||
+        !place_arena(cursor, policy.phycont_size,
+                     planned.phycont_base) ||
+        !add_guard_and_align(cursor, policy) ||
         !place_arena(cursor, policy.kernel_size, planned.kernel_base) ||
         !add_guard_and_align(cursor, policy) ||
         !place_arena(cursor, policy.stack_size, planned.stack_base) ||
@@ -149,6 +158,8 @@ plan_memory_layout(std::span<const GuestLoadRange> load_ranges,
     planned.memory_size = static_cast<std::size_t>(window_size);
     planned.heap_size = policy.heap_size;
     planned.sysmem_size = policy.sysmem_size;
+    planned.cdram_size = policy.cdram_size;
+    planned.phycont_size = policy.phycont_size;
     planned.kernel_size = policy.kernel_size;
     planned.stack_size = policy.stack_size;
     planned.tls_size = policy.tls_size;
@@ -184,6 +195,10 @@ RuntimeMemoryLayout scaffold_memory_layout() noexcept {
         .heap_size = 24U * 1024U * 1024U,
         .sysmem_base = base + 32U * 1024U * 1024U,
         .sysmem_size = 16U * 1024U * 1024U,
+        .cdram_base = 0U,
+        .cdram_size = 0U,
+        .phycont_base = 0U,
+        .phycont_size = 0U,
         .kernel_base = base + 56U * 1024U * 1024U,
         .kernel_size = 8U * 1024U * 1024U,
         .stack_base = base + 24U * 1024U * 1024U,

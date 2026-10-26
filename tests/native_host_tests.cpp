@@ -276,6 +276,8 @@ void test_memory_layout_planner() {
         .guard_size = 0x1000U,
         .heap_size = 0x2000U,
         .sysmem_size = 0x2000U,
+        .cdram_size = 0x2000U,
+        .phycont_size = 0x2000U,
         .kernel_size = 0x2000U,
         .stack_size = 0x2000U,
         .tls_size = 0x2000U,
@@ -329,6 +331,8 @@ void test_memory_layout_planner() {
     const std::array arenas{
         GuestLoadRange{first.heap_base, first.heap_size},
         GuestLoadRange{first.sysmem_base, first.sysmem_size},
+        GuestLoadRange{first.cdram_base, first.cdram_size},
+        GuestLoadRange{first.phycont_base, first.phycont_size},
         GuestLoadRange{first.kernel_base, first.kernel_size},
         GuestLoadRange{first.stack_base, first.stack_size},
         GuestLoadRange{first.tls_base, first.tls_size},

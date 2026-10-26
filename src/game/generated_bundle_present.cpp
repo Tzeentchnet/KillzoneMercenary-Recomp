@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "game/generated_bundle.hpp"
+#include "game/title_config.hpp"
 
 #include "generated_bundle_identity.hpp"
 #include KZMRECOMP_GENERATED_REGISTRY_HEADER
@@ -24,6 +25,19 @@ void generated_entry_trampoline() {
     vita_call(vita_generated_image_entry());
 }
 
+std::span<const std::string_view> support_module_start_order() noexcept {
+#if defined(KZMRECOMP_ENABLE_TEST_SEAMS)
+    if (vita_generated_image_module_count == 1U &&
+        vita_generated_image_modules[0] != nullptr &&
+        vita_generated_image_modules[0]->module_name != nullptr &&
+        std::string_view(vita_generated_image_modules[0]->module_name) ==
+            "synthetic_module") {
+        return {};
+    }
+#endif
+    return kSupportingModuleStartOrder;
+}
+
 } // namespace
 
 GeneratedBundleInfo generated_bundle_info() noexcept {
@@ -39,6 +53,7 @@ GeneratedBundleInfo generated_bundle_info() noexcept {
         .entry_module = vita_generated_image_entry_module(),
         .generated_entry = vita_generated_image_entry(),
         .callable_entry = generated_entry_trampoline,
+        .support_module_start_order = support_module_start_order(),
     };
 }
 

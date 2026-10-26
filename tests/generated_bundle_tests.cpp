@@ -36,7 +36,12 @@ int main() {
         bundle.tls_layout->descriptor_count != bundle.module_count ||
         bundle.dispatch_entries == nullptr || bundle.dispatch_count == 0U ||
         bundle.entry_module == nullptr || bundle.generated_entry == nullptr ||
-        bundle.callable_entry == nullptr) {
+        bundle.callable_entry == nullptr ||
+        bundle.support_module_start_order.size() + 1U !=
+            bundle.module_count ||
+        std::any_of(bundle.support_module_start_order.begin(),
+                    bundle.support_module_start_order.end(),
+                    [](std::string_view name) { return name.empty(); })) {
         std::cerr << "generated bundle adapter presence check failed\n";
         return 1;
     }
@@ -46,7 +51,8 @@ int main() {
         bundle.tls_layout != nullptr ||
         bundle.dispatch_entries != nullptr || bundle.dispatch_count != 0U ||
         bundle.entry_module != nullptr || bundle.generated_entry != nullptr ||
-        bundle.callable_entry != nullptr) {
+        bundle.callable_entry != nullptr ||
+        !bundle.support_module_start_order.empty()) {
         std::cerr << "absent generated bundle adapter check failed\n";
         return 1;
     }

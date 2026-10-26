@@ -6,12 +6,14 @@
 
 #include "vitarecomp/binding.h"
 #include "vitarecomp/cpu.h"
+#include "vitarecomp/dispatch.h"
 #include "vitarecomp/host.h"
 #include "vitarecomp/loader.h"
 #include "vitarecomp/reloc.h"
 #include "vitarecomp/runtime.h"
 extern "C" {
 #include "vitarecomp/mem.h"
+#include "vitarecomp/recomp_rt.h"
 }
 
 #include <algorithm>
@@ -33,7 +35,47 @@ namespace {
 constexpr std::uint32_t kIndexNone = UINT32_MAX;
 constexpr std::uint32_t kPtLoad = 1U;
 constexpr std::uint32_t kModuleInfoSize = 0x5CU;
+constexpr std::uint32_t kModuleProcessParamNid = UINT32_C(0x70FBA1E7);
 constexpr std::size_t kMaximumMetadataRecords = 1U << 20U;
+
+struct ModuleStartSequenceContext {
+    std::span<const vita_guest_entry_fn> entries;
+    vita_module_start_state state;
+};
+
+thread_local const ModuleStartSequenceContext *g_module_start_sequence =
+    nullptr;
+
+void apply_module_start_state(const vita_module_start_state &state) noexcept {
+    vita_cpu_reset();
+    r0 = state.argument_size;
+    r1 = state.argument_pointer;
+    sp = state.stack_pointer;
+    lr = state.return_address;
+}
+
+void module_start_sequence_entry() {
+    const ModuleStartSequenceContext *context = g_module_start_sequence;
+    if (context == nullptr || context->entries.empty()) {
+        vita_trap_unimpl(0U, 0U, "Host::module_start_sequence");
+        return;
+    }
+
+    // A single boundary lets support-created guest threads survive into main.
+    for (std::size_t index = 0U; index < context->entries.size(); ++index) {
+        const vita_guest_entry_fn entry = context->entries[index];
+        if (entry == nullptr) {
+            vita_trap_unimpl(0U, 0U, "Host::module_start_sequence");
+            return;
+        }
+        apply_module_start_state(context->state);
+        int status = 0;
+        if (vita_guest_thread_call(entry, &status) != VITA_OK) {
+            vita_trap_unimpl(0U, 0U, "Host::module_start_sequence");
+            return;
+        }
+    }
+}
 
 void copy_strict_name(
     const char *source,
@@ -783,11 +825,16 @@ struct RuntimeVariableProviders {
 
 RuntimeVariableProviders
 prepare_runtime_variable_providers(const std::vector<ModuleState> &states) {
+    enum class ProviderLocation {
+        any,
+        loaded,
+    };
     struct ProviderSpec {
         std::uint32_t library_nid;
         std::uint32_t variable_nid;
         const char *name;
-        bool must_be_loaded;
+        ProviderLocation location;
+        bool allow_distinct_targets;
         bool initialize;
         std::uint32_t initial_value;
     };
@@ -796,7 +843,8 @@ prepare_runtime_variable_providers(const std::vector<ModuleState> &states) {
             UINT32_C(0xCAE9ACE6),
             UINT32_C(0x93B8AA67),
             "SceLibKernel::__stack_chk_guard",
-            false,
+            ProviderLocation::any,
+            true,
             true,
             UINT32_C(0x0DEADBEE),
         },
@@ -804,7 +852,8 @@ prepare_runtime_variable_providers(const std::vector<ModuleState> &states) {
             UINT32_C(0x5AD9C136),
             UINT32_C(0xDF084DFA),
             "SceLibcParam::__sce_libcparam",
-            true,
+            ProviderLocation::loaded,
+            false,
             false,
             0U,
         },
@@ -818,8 +867,11 @@ prepare_runtime_variable_providers(const std::vector<ModuleState> &states) {
     result.providers.reserve(specs.size() + variable_count);
     result.strict_ranges.reserve(variable_count);
     result.owned_names.reserve(variable_count);
-    for (const ProviderSpec &spec : specs) {
-        std::optional<std::uint32_t> address;
+    for (std::size_t spec_index = 0U; spec_index < specs.size();
+         ++spec_index) {
+        const ProviderSpec &spec = specs[spec_index];
+        std::vector<std::uint32_t> addresses;
+        addresses.reserve(states.size());
         for (std::size_t module_index = 0U; module_index < states.size();
              ++module_index) {
             const ModuleState &state = states[module_index];
@@ -832,46 +884,55 @@ prepare_runtime_variable_providers(const std::vector<ModuleState> &states) {
                     variable.variable_nid != spec.variable_nid) {
                     continue;
                 }
-                if (variable.target_address == 0U ||
-                    (address.has_value() &&
-                     *address != variable.target_address)) {
+                if (variable.target_address == 0U) {
                     fail_preparation(
                         TitlePreparationStage::binding,
                         VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH,
                         static_cast<std::uint32_t>(module_index),
                         static_cast<std::uint32_t>(record_index));
                 }
-                address = variable.target_address;
+                if (std::find(addresses.begin(), addresses.end(),
+                              variable.target_address) != addresses.end()) {
+                    continue;
+                }
+                if (!addresses.empty() && !spec.allow_distinct_targets) {
+                        fail_preparation(
+                            TitlePreparationStage::binding,
+                            VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH,
+                            static_cast<std::uint32_t>(module_index),
+                            static_cast<std::uint32_t>(record_index));
+                }
+                addresses.push_back(variable.target_address);
             }
         }
-        if (!address.has_value()) {
-            continue;
+        for (const std::uint32_t address : addresses) {
+            bool loaded = false;
+            for (const ModuleState &state : states) {
+                loaded = loaded ||
+                         module_contains(*state.content, address,
+                                         sizeof(std::uint32_t));
+            }
+            if (spec.location == ProviderLocation::loaded && !loaded) {
+                fail_preparation(
+                    TitlePreparationStage::binding,
+                    VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH, kIndexNone,
+                    static_cast<std::uint32_t>(spec_index));
+            }
+            if (spec.initialize &&
+                vita_mem_copy_to_guest(
+                    address, &spec.initial_value,
+                    sizeof(spec.initial_value)) != 0) {
+                fail_preparation(
+                    TitlePreparationStage::binding,
+                    VITA_BINDING_ERROR_EXPORT_RANGE);
+            }
+            result.providers.push_back(vita_binding_variable_provider{
+                spec.library_nid,
+                spec.variable_nid,
+                address,
+                spec.name,
+            });
         }
-
-        bool loaded = false;
-        for (const ModuleState &state : states) {
-            loaded = loaded ||
-                     module_contains(*state.content, *address, sizeof(std::uint32_t));
-        }
-        if (loaded != spec.must_be_loaded) {
-            fail_preparation(
-                TitlePreparationStage::binding,
-                VITA_BINDING_ERROR_VARIABLE_TARGET_MISMATCH);
-        }
-        if (spec.initialize &&
-            vita_mem_copy_to_guest(
-                *address, &spec.initial_value,
-                sizeof(spec.initial_value)) != 0) {
-            fail_preparation(
-                TitlePreparationStage::binding,
-                VITA_BINDING_ERROR_EXPORT_RANGE);
-        }
-        result.providers.push_back(vita_binding_variable_provider{
-            spec.library_nid,
-            spec.variable_nid,
-            *address,
-            spec.name,
-        });
     }
 
     for (std::size_t module_index = 0U; module_index < states.size();
@@ -1179,6 +1240,104 @@ void validate_bundle_dispatch(const std::vector<ModuleState> &states,
     }
 }
 
+std::vector<vita_guest_entry_fn>
+order_module_starts(const std::vector<ModuleState> &states,
+                    const game::GeneratedBundleInfo &bundle) {
+    const std::span<const std::string_view> support_order =
+        bundle.support_module_start_order;
+    if (states.empty() || support_order.size() != states.size() - 1U) {
+        fail_preparation(TitlePreparationStage::descriptor_agreement,
+                         VITA_BINDING_ERROR_GENERATED_ABI);
+    }
+
+    std::vector<bool> used(states.size(), false);
+    std::vector<vita_guest_entry_fn> ordered;
+    ordered.reserve(states.size());
+    for (const std::string_view expected_name : support_order) {
+        if (expected_name.empty()) {
+            fail_preparation(TitlePreparationStage::descriptor_agreement,
+                             VITA_BINDING_ERROR_GENERATED_ABI);
+        }
+        std::size_t match = states.size();
+        for (std::size_t index = 0U; index < states.size(); ++index) {
+            if (states[index].content->module_name() != expected_name)
+                continue;
+            if (match != states.size() || used[index] ||
+                states[index].generated == bundle.entry_module) {
+                fail_preparation(
+                    TitlePreparationStage::descriptor_agreement,
+                    VITA_BINDING_ERROR_GENERATED_ABI,
+                    static_cast<std::uint32_t>(index));
+            }
+            match = index;
+        }
+        if (match == states.size()) {
+            fail_preparation(TitlePreparationStage::descriptor_agreement,
+                             VITA_BINDING_ERROR_GENERATED_ABI);
+        }
+        used[match] = true;
+        ordered.push_back(states[match].generated->entry_function);
+    }
+
+    std::size_t entry_index = states.size();
+    for (std::size_t index = 0U; index < states.size(); ++index) {
+        if (states[index].generated == bundle.entry_module) {
+            entry_index = index;
+            break;
+        }
+    }
+    if (entry_index == states.size() || used[entry_index]) {
+        fail_preparation(TitlePreparationStage::descriptor_agreement,
+                         VITA_BINDING_ERROR_GENERATED_ABI);
+    }
+    used[entry_index] = true;
+    if (std::find(used.begin(), used.end(), false) != used.end()) {
+        fail_preparation(TitlePreparationStage::descriptor_agreement,
+                         VITA_BINDING_ERROR_GENERATED_ABI);
+    }
+    ordered.push_back(bundle.callable_entry);
+    return ordered;
+}
+
+void configure_process_param(const std::vector<ModuleState> &states,
+                             const game::GeneratedBundleInfo &bundle) {
+    const ModuleState *entry_state = nullptr;
+    for (const ModuleState &state : states) {
+        if (state.generated == bundle.entry_module) {
+            entry_state = &state;
+            break;
+        }
+    }
+    if (entry_state == nullptr) {
+        fail_preparation(TitlePreparationStage::binding,
+                         VITA_BINDING_ERROR_GENERATED_ABI);
+    }
+
+    std::optional<std::uint32_t> address;
+    for (const vita_binding_export_metadata &item :
+         entry_state->parsed.exports) {
+        if (item.library_nid != 0U ||
+            item.symbol_nid != kModuleProcessParamNid) {
+            continue;
+        }
+        if (address.has_value() ||
+            item.kind != VITA_BINDING_EXPORT_VARIABLE ||
+            !module_contains(*entry_state->content, item.address,
+                             sizeof(std::uint32_t))) {
+            fail_preparation(TitlePreparationStage::binding,
+                             VITA_BINDING_ERROR_EXPORT_RANGE);
+        }
+        address = item.address;
+    }
+    if (!address.has_value())
+        return;
+
+    const vita_result status = vita_process_param_set(*address);
+    if (status != VITA_OK) {
+        fail_preparation(TitlePreparationStage::binding, status);
+    }
+}
+
 } // namespace
 
 struct PreparedTitle::State {
@@ -1194,7 +1353,8 @@ struct PreparedTitle::State {
     std::unique_ptr<RuntimeSession> runtime;
     vita_binding_view binding_view{};
     std::vector<std::array<char, 64U>> strict_variable_names;
-    vita_guest_entry_fn entry = nullptr;
+    std::vector<vita_guest_entry_fn> module_starts;
+    vita_module_start_state module_start_state{};
 };
 
 std::string_view
@@ -1274,14 +1434,27 @@ PreparedTitle &PreparedTitle::operator=(PreparedTitle &&) noexcept = default;
 
 TitleCallResult PreparedTitle::execute() && noexcept {
     std::unique_ptr<State> state = std::move(state_);
-    if (state == nullptr || state->entry == nullptr) {
+    if (state == nullptr || state->module_starts.empty()) {
         return TitleCallResult{
             .outcome = TitleCallOutcome::boundary_error,
             .status = VITA_ERROR_INVALID_ARGUMENT,
         };
     }
+    if (g_module_start_sequence != nullptr) {
+        return TitleCallResult{
+            .outcome = TitleCallOutcome::boundary_error,
+            .status = VITA_ERROR_BUSY,
+        };
+    }
+    const ModuleStartSequenceContext context{
+        std::span<const vita_guest_entry_fn>(state->module_starts),
+        state->module_start_state,
+    };
+    g_module_start_sequence = &context;
     vita_guest_call_result framework_result{};
-    const int call_status = vita_guest_call(state->entry, &framework_result);
+    const int call_status =
+        vita_guest_call(module_start_sequence_entry, &framework_result);
+    g_module_start_sequence = nullptr;
     if (call_status != VITA_OK) {
         return TitleCallResult{
             .outcome = TitleCallOutcome::boundary_error,
@@ -1425,6 +1598,7 @@ PreparedTitle prepare_title(const ValidatedContent &content,
         validate_descriptor(states[index], static_cast<std::uint32_t>(index));
     }
     validate_bundle_dispatch(states, bundle);
+    prepared->module_starts = order_module_starts(states, bundle);
     test_preparation_gate(TitlePreparationStage::descriptor_agreement);
 
     std::vector<vita_binding_module> binding_modules;
@@ -1463,6 +1637,7 @@ PreparedTitle prepare_title(const ValidatedContent &content,
         fail_preparation(TitlePreparationStage::binding,
                          VITA_BINDING_ERROR_EXPORT_RANGE);
     }
+    configure_process_param(states, bundle);
     test_preparation_gate(TitlePreparationStage::binding);
 
     std::uint32_t initial_stack_pointer = 0U;
@@ -1505,7 +1680,7 @@ PreparedTitle prepare_title(const ValidatedContent &content,
                                           : VITA_ERROR_NO_MEMORY);
     }
     test_preparation_gate(TitlePreparationStage::tls);
-    prepared->entry = bundle.callable_entry;
+    prepared->module_start_state = entry_state;
     return PreparedTitle(std::move(prepared));
 }
 

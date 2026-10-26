@@ -328,7 +328,7 @@ function Test-ModuleEvidence {
         )
         Assert-ProvenanceCondition `
             -Condition (
-                $key -eq ($stub -bor 1) -and
+                ($key -band 0xFFFFFFFE) -eq $stub -and
                 ($stub -band 1) -eq 0 -and
                 ($site -band 3) -eq 0 -and
                 $functionImportKeys.Add([string] $functionImport.key) -and

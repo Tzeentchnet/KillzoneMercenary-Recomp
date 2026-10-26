@@ -5,6 +5,7 @@
 #include "vitarecomp/runtime.h"
 
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 namespace kzm::game {
@@ -20,6 +21,7 @@ struct GeneratedBundleInfo {
     const vita_generated_module_descriptor *entry_module;
     vita_guest_entry_fn generated_entry;
     vita_guest_entry_fn callable_entry;
+    std::span<const std::string_view> support_module_start_order;
 };
 
 [[nodiscard]] GeneratedBundleInfo generated_bundle_info() noexcept;

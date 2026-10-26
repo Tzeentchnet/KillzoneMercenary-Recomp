@@ -15,6 +15,7 @@ GeneratedBundleInfo generated_bundle_info() noexcept {
         .entry_module = nullptr,
         .generated_entry = nullptr,
         .callable_entry = nullptr,
+        .support_module_start_order = {},
     };
 }
 

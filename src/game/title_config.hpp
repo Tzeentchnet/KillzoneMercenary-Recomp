@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -10,6 +11,8 @@ namespace kzm::game {
 
 inline constexpr std::string_view kTitleId = "PCSA00107";
 inline constexpr std::string_view kDisplayName = "Killzone Mercenary Recomp";
+inline constexpr std::array<std::string_view, 2>
+    kSupportingModuleStartOrder{"SceLibc", "SceLibFios2"};
 
 struct RuntimeMemoryLayout {
     std::uint32_t memory_base;
@@ -18,6 +21,10 @@ struct RuntimeMemoryLayout {
     std::uint32_t heap_size;
     std::uint32_t sysmem_base;
     std::uint32_t sysmem_size;
+    std::uint32_t cdram_base;
+    std::uint32_t cdram_size;
+    std::uint32_t phycont_base;
+    std::uint32_t phycont_size;
     std::uint32_t kernel_base;
     std::uint32_t kernel_size;
     std::uint32_t stack_base;
@@ -39,6 +46,8 @@ struct MemoryLayoutPolicy {
     std::uint32_t guard_size;
     std::uint32_t heap_size;
     std::uint32_t sysmem_size;
+    std::uint32_t cdram_size;
+    std::uint32_t phycont_size;
     std::uint32_t kernel_size;
     std::uint32_t stack_size;
     std::uint32_t tls_size;

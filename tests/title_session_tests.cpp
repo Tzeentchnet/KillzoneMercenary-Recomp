@@ -83,7 +83,9 @@ void write_elf(const std::filesystem::path &path,
                bool data_function_export = false,
                bool zero_site_variable_import = false,
                bool segmented_variable_import = false,
-               bool strict_variable_import = false) {
+               bool strict_variable_import = false,
+               std::string_view module_name = "synthetic_module",
+               std::uint32_t load_address = 0U) {
     const bool segmented =
         segmented_variable_import || strict_variable_import;
     if ((data_function_export || segmented) &&
@@ -114,8 +116,8 @@ void write_elf(const std::filesystem::path &path,
 
     write_u32(bytes, 52U, 1U);
     write_u32(bytes, 56U, 0U);
-    write_u32(bytes, 60U, 0U);
-    write_u32(bytes, 64U, 0U);
+    write_u32(bytes, 60U, load_address);
+    write_u32(bytes, 64U, load_address);
     write_u32(bytes, 68U, segmented ? 448U : 512U);
     const std::uint32_t segment_memory_size =
         std::max<std::uint32_t>(
@@ -131,8 +133,8 @@ void write_elf(const std::filesystem::path &path,
         constexpr std::size_t relocation_header = 116U;
         write_u32(bytes, data_header + 0U, 1U);
         write_u32(bytes, data_header + 4U, 448U);
-        write_u32(bytes, data_header + 8U, 0x3000U);
-        write_u32(bytes, data_header + 12U, 0x3000U);
+        write_u32(bytes, data_header + 8U, load_address + 0x3000U);
+        write_u32(bytes, data_header + 12U, load_address + 0x3000U);
         write_u32(bytes, data_header + 16U, 4U);
         write_u32(bytes, data_header + 20U, 16U);
         write_u32(bytes, data_header + 24U, 6U);
@@ -149,8 +151,8 @@ void write_elf(const std::filesystem::path &path,
         constexpr std::size_t header = 84U;
         write_u32(bytes, header + 0U, 1U);
         write_u32(bytes, header + 4U, 512U);
-        write_u32(bytes, header + 8U, 0x3000U);
-        write_u32(bytes, header + 12U, 0x3000U);
+        write_u32(bytes, header + 8U, load_address + 0x3000U);
+        write_u32(bytes, header + 12U, load_address + 0x3000U);
         write_u32(bytes, header + 16U, 0U);
         write_u32(bytes, header + 20U, 16U);
         write_u32(bytes, header + 24U, 6U);
@@ -190,8 +192,7 @@ void write_elf(const std::filesystem::path &path,
     }
 
     write_u16(bytes, 0x102U, 0x0100U);
-    constexpr std::string_view name = "synthetic_module";
-    std::copy(name.begin(), name.end(), bytes.begin() + 0x104U);
+    std::copy(module_name.begin(), module_name.end(), bytes.begin() + 0x104U);
     if (invalid_module_tables) {
         write_u32(bytes, 0x124U, 8U);
         write_u32(bytes, 0x128U, 4U);
@@ -354,6 +355,85 @@ std::filesystem::path write_fixture(const std::filesystem::path &root,
     return manifest;
 }
 
+std::string format_address(std::uint32_t address) {
+    std::array<char, 11> text{};
+    const int written =
+        std::snprintf(text.data(), text.size(), "0x%08X", address);
+    check(written == 10, "failed to format guest address");
+    return text.data();
+}
+
+std::filesystem::path
+write_startup_fixture(const std::filesystem::path &root) {
+    struct ModuleSpec {
+        std::string_view path;
+        std::string_view name;
+        std::uint32_t load_address;
+    };
+    constexpr std::array modules{
+        ModuleSpec{"a-entry.elf", "synthetic_entry", 0x10200000U},
+        ModuleSpec{"b-support-b.elf", "synthetic_support_b", 0x10100000U},
+        ModuleSpec{"c-support-a.elf", "synthetic_support_a", 0x10000000U},
+    };
+
+    const std::filesystem::path content = root / L"app0";
+    const std::filesystem::path manifest = root / L"runtime-manifest.json";
+    std::string module_records;
+    for (std::size_t index = 0U; index < modules.size(); ++index) {
+        const ModuleSpec &module = modules[index];
+        const std::filesystem::path module_path =
+            content / std::filesystem::path(std::string(module.path));
+        write_elf(module_path, false, RelocationCase::none, 0x1001U, 2U,
+                  false, 0U, 4096U, false, false, false, false, false,
+                  module.name, module.load_address);
+        const std::string hash =
+            kzm::host::sha256_hex(kzm::host::sha256_file(module_path));
+        if (index != 0U)
+            module_records += ",\n";
+        module_records +=
+            "  {\n"
+            "    \"path\": \"" +
+            std::string(module.path) +
+            "\",\n"
+            "    \"sha256\": \"" +
+            hash +
+            "\",\n"
+            "    \"fileSize\": 512,\n"
+            "    \"moduleInfo\": {\"name\": \"" +
+            std::string(module.name) +
+            "\", \"encodedEntry\": \"0x00000100\", "
+            "\"segmentIndex\": 0, \"segmentOffset\": 256, "
+            "\"virtualAddress\": \"" +
+            format_address(module.load_address + 0x100U) +
+            "\"},\n"
+            "    \"programHeaderCount\": 1,\n"
+            "    \"loadSegments\": [{\"index\": 0, \"fileOffset\": 0, "
+            "\"fileSize\": 512, \"virtualAddress\": \"" +
+            format_address(module.load_address) +
+            "\", \"memorySize\": 8192, \"rangeEndExclusive\": \"" +
+            format_address(module.load_address + 8192U) +
+            "\", \"flags\": \"r-x\", \"alignment\": 4096}]\n"
+            "  }";
+    }
+
+    const std::string json =
+        "{\n"
+        "  \"schemaVersion\": 1,\n"
+        "  \"titleId\": \"PCSA00107\",\n"
+        "  \"sourceArchive\": {\"path\": \"synthetic.zip\", "
+        "\"sha256\": "
+        "\"0000000000000000000000000000000000000000000000000000000000000000\"},"
+        "\n"
+        "  \"vita3k\": {\"sourceRevision\": \"0000000\", "
+        "\"dumpCapability\": \"--dump-elfs\"},\n"
+        "  \"imageFormat\": {\"elfClass\": \"ELF32\", "
+        "\"byteOrder\": \"little-endian\", \"machine\": \"ARM\"},\n"
+        "  \"modules\": [\n" +
+        module_records + "\n  ]\n}\n";
+    write_text(manifest, json);
+    return manifest;
+}
+
 std::uint32_t g_entry_calls = 0U;
 std::uint32_t g_after_strict = 0U;
 std::uint32_t g_entry_tls_base = 0U;
@@ -391,6 +471,49 @@ void strict_import_default() {
     vita_trap_import(0x1A0U, UINT32_C(0x11110001),
                      "FixtureImport::namedDefault");
 }
+
+std::array<std::uint32_t, 3> g_module_start_calls{};
+std::size_t g_module_start_call_count = 0U;
+bool g_module_start_state_valid = true;
+std::uint32_t g_after_support_strict = 0U;
+
+void reset_module_start_observations() {
+    g_module_start_calls.fill(0U);
+    g_module_start_call_count = 0U;
+    g_module_start_state_valid = true;
+    g_after_support_strict = 0U;
+}
+
+void record_module_start(std::uint32_t id) {
+    if (g_module_start_call_count >= g_module_start_calls.size()) {
+        g_module_start_state_valid = false;
+        return;
+    }
+    if (r0 != 0U || r1 != 0U || r4 != 0U || r5 != 0U || sp == 0U ||
+        (sp & 15U) != 0U || lr != 0U) {
+        g_module_start_state_valid = false;
+    }
+    g_module_start_calls[g_module_start_call_count++] = id;
+}
+
+void support_a_start() {
+    record_module_start(1U);
+    r4 = UINT32_C(0xA4A4A4A4);
+}
+
+void support_b_start() {
+    record_module_start(2U);
+    r5 = UINT32_C(0xB5B5B5B5);
+}
+
+void strict_support_b_start() {
+    record_module_start(2U);
+    vita_trap_unimpl(UINT32_C(0x10101000), UINT32_C(0xE7F000F0),
+                     "synthetic support strict failure");
+    ++g_after_support_strict;
+}
+
+void selected_entry_start() { record_module_start(3U); }
 
 struct BundleFixture {
     vita_dispatch_entry dispatch[3]{};
@@ -525,6 +648,103 @@ struct BundleFixture {
     }
 };
 
+struct StartupBundleFixture {
+    static constexpr std::size_t module_count = 3U;
+    static constexpr std::size_t support_b_index = 0U;
+    static constexpr std::size_t entry_index = 1U;
+    static constexpr std::size_t support_a_index = 2U;
+
+    std::array<std::array<vita_dispatch_entry, 1>, module_count>
+        module_dispatch{};
+    std::array<vita_generated_module_descriptor, module_count> descriptors{};
+    std::array<const vita_generated_module_descriptor *, module_count>
+        modules{};
+    std::array<vita_dispatch_entry, module_count> dispatch{};
+    vita_generated_tls_layout tls_layout{};
+    std::array<std::string_view, 2> support_order{
+        "synthetic_support_a",
+        "synthetic_support_b",
+    };
+    std::string identity;
+    kzm::game::GeneratedBundleInfo bundle{};
+
+    StartupBundleFixture(const kzm::host::ValidatedContent &content,
+                         bool strict_support = false) {
+        initialize_descriptor(
+            support_b_index, "synthetic-support-b", "synthetic_support_b",
+            UINT32_C(0x10101001),
+            strict_support ? strict_support_b_start : support_b_start);
+        initialize_descriptor(entry_index, "synthetic-entry",
+                              "synthetic_entry", UINT32_C(0x10201001),
+                              selected_entry_start);
+        initialize_descriptor(support_a_index, "synthetic-support-a",
+                              "synthetic_support_a",
+                              UINT32_C(0x10001001), support_a_start);
+
+        modules = {
+            &descriptors[support_b_index],
+            &descriptors[entry_index],
+            &descriptors[support_a_index],
+        };
+        dispatch = {
+            module_dispatch[support_a_index][0],
+            module_dispatch[support_b_index][0],
+            module_dispatch[entry_index][0],
+        };
+        tls_layout = vita_generated_tls_layout{
+            VITA_GENERATED_MODULE_ABI_VERSION,
+            static_cast<std::uint32_t>(sizeof(vita_generated_tls_layout)),
+            nullptr,
+            static_cast<std::uint32_t>(module_count),
+            0U,
+            0U,
+            16U,
+        };
+        identity = kzm::host::sha256_hex(content.manifest_identity());
+        bundle = kzm::game::GeneratedBundleInfo{
+            .present = true,
+            .expected_runtime_manifest_sha256 = identity,
+            .module_descriptors = modules.data(),
+            .module_count = static_cast<std::uint32_t>(module_count),
+            .tls_layout = &tls_layout,
+            .dispatch_entries = dispatch.data(),
+            .dispatch_count = static_cast<std::uint32_t>(dispatch.size()),
+            .entry_module = &descriptors[entry_index],
+            .generated_entry = selected_entry_start,
+            .callable_entry = selected_entry_start,
+            .support_module_start_order = support_order,
+        };
+    }
+
+  private:
+    void initialize_descriptor(std::size_t index, const char *id,
+                               const char *name, std::uint32_t raw_address,
+                               vita_fn entry) {
+        module_dispatch[index][0] =
+            vita_dispatch_entry{raw_address, entry};
+        vita_generated_module_descriptor &descriptor = descriptors[index];
+        descriptor.abi_version = VITA_GENERATED_MODULE_ABI_VERSION;
+        descriptor.struct_size =
+            static_cast<std::uint32_t>(sizeof(descriptor));
+        descriptor.module_id = id;
+        descriptor.module_name = name;
+        descriptor.dispatch_entries = module_dispatch[index].data();
+        descriptor.dispatch_count = 1U;
+        descriptor.entry_present = 1U;
+        descriptor.entry_raw_address = raw_address;
+        descriptor.entry_dispatch_key = raw_address;
+        descriptor.entry_function = entry;
+        descriptor.entry_resolved = 1U;
+        descriptor.report.schema_version =
+            VITA_GENERATED_REPORT_SCHEMA_VERSION;
+        descriptor.report.structural_ready = 1U;
+        descriptor.report.production_ready = 1U;
+        descriptor.report.strict_unsupported = 1U;
+        descriptor.report.instrumentation_flags =
+            VITA_GENERATED_INSTRUMENT_PC;
+    }
+};
+
 kzm::host::Logger quiet_logger() {
     return kzm::host::Logger(kzm::host::LogLevel::error,
                              [](std::string_view) {});
@@ -542,6 +762,87 @@ void expect_preparation_failure(const kzm::host::ValidatedContent &content,
         return;
     }
     throw TestFailure("invalid title preparation unexpectedly succeeded");
+}
+
+void test_module_start_sequence(const std::filesystem::path &root) {
+    const std::filesystem::path manifest = write_startup_fixture(root);
+    kzm::host::ValidatedContent content =
+        kzm::host::validate_content_manifest(manifest, root / L"app0");
+    check(content.module_count() == StartupBundleFixture::module_count,
+          "startup fixture did not retain every module");
+
+    {
+        StartupBundleFixture fixture(content);
+        reset_module_start_observations();
+        kzm::host::Logger logger = quiet_logger();
+        kzm::host::PreparedTitle prepared =
+            kzm::host::prepare_title(content, fixture.bundle, logger);
+        const kzm::host::TitleCallResult result =
+            std::move(prepared).execute();
+        check(result.outcome == kzm::host::TitleCallOutcome::completed,
+              "ordered module starts did not complete");
+        check(g_module_start_call_count == 3U &&
+                  g_module_start_calls ==
+                      std::array<std::uint32_t, 3>{1U, 2U, 3U},
+              "module starts did not follow support dependency order");
+        check(g_module_start_state_valid,
+              "module starts did not receive clean CPU entry state");
+    }
+
+    {
+        StartupBundleFixture fixture(content, true);
+        reset_module_start_observations();
+        kzm::host::Logger logger = quiet_logger();
+        kzm::host::PreparedTitle prepared =
+            kzm::host::prepare_title(content, fixture.bundle, logger);
+        const kzm::host::TitleCallResult result =
+            std::move(prepared).execute();
+        check(result.outcome == kzm::host::TitleCallOutcome::strict_failure &&
+                  std::string_view(result.strict_name.data()) ==
+                      "synthetic support strict failure",
+              "support-module strict failure was not returned");
+        check(g_module_start_call_count == 2U &&
+                  g_module_start_calls[0] == 1U &&
+                  g_module_start_calls[1] == 2U &&
+                  g_after_support_strict == 0U,
+              "support-module failure did not stop later module starts");
+    }
+
+    {
+        StartupBundleFixture fixture(content);
+        fixture.bundle.support_module_start_order =
+            std::span<const std::string_view>(fixture.support_order)
+                .first<1>();
+        reset_module_start_observations();
+        g_entry_calls = 0U;
+        expect_preparation_failure(
+            content, fixture.bundle,
+            kzm::host::TitlePreparationStage::descriptor_agreement);
+        check(g_module_start_call_count == 0U,
+              "missing startup policy reached guest code");
+    }
+    {
+        StartupBundleFixture fixture(content);
+        fixture.support_order[1] = fixture.support_order[0];
+        reset_module_start_observations();
+        g_entry_calls = 0U;
+        expect_preparation_failure(
+            content, fixture.bundle,
+            kzm::host::TitlePreparationStage::descriptor_agreement);
+        check(g_module_start_call_count == 0U,
+              "duplicate startup policy reached guest code");
+    }
+    {
+        StartupBundleFixture fixture(content);
+        fixture.support_order[1] = "synthetic_entry";
+        reset_module_start_observations();
+        g_entry_calls = 0U;
+        expect_preparation_failure(
+            content, fixture.bundle,
+            kzm::host::TitlePreparationStage::descriptor_agreement);
+        check(g_module_start_call_count == 0U,
+              "selected entry in support policy reached guest code");
+    }
 }
 
 void test_completion_and_retained_bytes(const std::filesystem::path &root) {
@@ -1020,6 +1321,7 @@ int main() {
         std::error_code ignored;
         std::filesystem::remove_all(root, ignored);
         std::filesystem::create_directories(root);
+        test_module_start_sequence(root / L"module-starts");
         test_completion_and_retained_bytes(root / L"completion");
         test_data_address_function_export(root / L"data-export");
         test_manifest_segment_order(root / L"segment-order");

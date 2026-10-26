@@ -97,6 +97,7 @@ function(_kzmrecomp_configure_generated_c target)
   )
   target_compile_definitions("${target}" PRIVATE
     _CRT_SECURE_NO_WARNINGS
+    $<TARGET_PROPERTY:vitarecomp,INTERFACE_COMPILE_DEFINITIONS>
   )
   if(MSVC)
     target_compile_options("${target}" PRIVATE /bigobj)
